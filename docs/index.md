@@ -86,7 +86,7 @@ Detailed, ready-to-import examples are available under [Examples](examples/low-s
 |-----------|---------|
 | **n8n**	| Latest stable release |
 | **Shopware** | 6.6.x.x |
-| **Node Package** | 1.3.1 |
+| **Node Package** | 1.4.5 |
 
 For best compatibility, keep your n8n instance up to date.
 
