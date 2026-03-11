@@ -45,7 +45,7 @@ Once configured, the node uses these credentials to authenticate against the Sho
 
 n8n version: tested with the latest n8n release (keep n8n updated for best compatibility).
 
-Shopware version: compatible with Shopware 6.6.x.x.
+Shopware version: compatible with Shopware 6.6.x and 6.7.x
 
 ## Usage
 
