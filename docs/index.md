@@ -13,7 +13,7 @@ With this node, you can connect your Shopware store to other systems, streamline
 |----------|--------------|
 | **Node Type** | Community Node |
 | **Package Name** | `@solution25/n8n-nodes-shopware` |
-| **Supported Platform** | Shopware 6.6.x.x |
+| **Supported Platform** | Shopware 6.6.x.x & 6.7.x.x|
 | **Tested With** | Latest n8n release |
 | **Authentication** | Shopware Integration (Client ID / Secret) |
 
@@ -85,7 +85,7 @@ Detailed, ready-to-import examples are available under [Examples](examples/low-s
 | Component | Version |
 |-----------|---------|
 | **n8n**	| Latest stable release |
-| **Shopware** | 6.6.x.x |
+| **Shopware** | 6.6.x.x & 6.7.x.x|
 | **Node Package** | 1.4.5 |
 
 For best compatibility, keep your n8n instance up to date.
