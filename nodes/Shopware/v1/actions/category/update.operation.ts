@@ -112,7 +112,7 @@ export async function execute(
 
 			const updateBody: CategoryUpdatePayload = {
 				active: updateFields.active as boolean,
-				parentId: updateFields.parentId ? (updateFields.parentId as string).split('-')[0] : '',
+				parentId: updateFields.parentId ? (JSON.parse(updateFields.parentId as string) as string[])[0] : '',
 				name: updateFields.name as string,
 				description: updateFields.description as string,
 			};

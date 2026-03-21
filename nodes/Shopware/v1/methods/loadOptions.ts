@@ -47,14 +47,7 @@ async function fetchResource<T>(
 		let value = item[fields[0] as keyof T] as string;
 
 		if (mapValue) {
-			value = fields
-				.map((field) => {
-					if (typeof item[field as keyof T] === 'object') {
-						return JSON.stringify(item[field as keyof T]);
-					}
-					return item[field as keyof T];
-				})
-				.join('-');
+			value = JSON.stringify(fields.map((field) => item[field as keyof T]));
 		}
 
 		returnData.push({

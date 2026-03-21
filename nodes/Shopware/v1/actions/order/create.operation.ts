@@ -604,7 +604,7 @@ export async function execute(
 				};
 			}
 
-			const currencyData = (this.getNodeParameter('currency', i) as string).split('-');
+			const currencyData = JSON.parse(this.getNodeParameter('currency', i) as string) as string[];
 
 			const nodeLineItems = (
 				this.getNodeParameter('lineItems', i) as { lineItem: Array<NodeLineItem> | null }

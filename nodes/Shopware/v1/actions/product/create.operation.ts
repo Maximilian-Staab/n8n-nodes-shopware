@@ -301,17 +301,20 @@ export async function execute(
 							}))
 						: []),
 				],
-				taxId: (this.getNodeParameter('taxRate', i) as string).split('-')[0],
+				taxId: (JSON.parse(this.getNodeParameter('taxRate', i) as string) as string[])[0],
 				manufacturer: (this.getNodeParameter('manufacturer', i) as string)
 					? {
 							name: this.getNodeParameter('manufacturer', i) as string,
 						}
 					: undefined,
 				stock: this.getNodeParameter('stock', i) as number,
-				categories: (this.getNodeParameter('categories', i) as string[]).map((category) => ({
-					id: category.split('-')[0],
-					name: category.split('-')[1],
-				})),
+				categories: (this.getNodeParameter('categories', i) as string[]).map((category) => {
+					const categoryData = JSON.parse(category) as string[];
+					return {
+						id: categoryData[0],
+						name: categoryData[1],
+					};
+				}),
 				visibilities: (this.getNodeParameter('salesChannels', i) as string[]).map(
 					(salesChannelId) => ({
 						salesChannelId,
@@ -342,7 +345,7 @@ export async function execute(
 				}
 			}
 
-			const taxRate = parseFloat((this.getNodeParameter('taxRate', i) as string).split('-')[2]);
+			const taxRate = parseFloat((JSON.parse(this.getNodeParameter('taxRate', i) as string) as string[])[2]);
 			createBody.price.forEach((price) => {
 				if (price.net === 0) {
 					price.net = parseFloat((price.gross / (1 + taxRate / 100)).toFixed(2));

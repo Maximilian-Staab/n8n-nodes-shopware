@@ -262,17 +262,20 @@ export async function execute(
 							}))
 						: []),
 				],
-				taxId: (updateFields.taxRate as string)?.split('-')[0],
+				taxId: updateFields.taxRate ? (JSON.parse(updateFields.taxRate as string) as string[])[0] : undefined,
 				manufacturer: (updateFields.manufacturer as string)
 					? {
 							name: updateFields.manufacturer as string,
 						}
 					: undefined,
 				stock: updateFields.stock as number,
-				categories: (updateFields.categories as string[])?.map((category) => ({
-					id: category.split('-')[0],
-					name: category.split('-')[1],
-				})),
+				categories: (updateFields.categories as string[])?.map((category) => {
+					const categoryData = JSON.parse(category) as string[];
+					return {
+						id: categoryData[0],
+						name: categoryData[1],
+					};
+				}),
 				visibilities: (updateFields.salesChannels as string[])?.map((salesChannelId) => ({
 					salesChannelId,
 					visibility: 30,
@@ -295,7 +298,7 @@ export async function execute(
 
 			if (updateBody.price) {
 				const taxRate = updateFields.taxRate
-					? parseFloat((updateFields.taxRate as string).split('-')[2])
+					? parseFloat((JSON.parse(updateFields.taxRate as string) as string[])[2])
 					: await getProductTaxRate.call(this, id);
 
 				updateBody.price.forEach((price) => {

@@ -171,7 +171,7 @@ export async function execute(
 						description: this.getNodeParameter('parentCategoryDescription', i) as string,
 					};
 				} else {
-					parentId = (this.getNodeParameter('parentId', i) as string).split('-')[0];
+					parentId = (JSON.parse(this.getNodeParameter('parentId', i) as string) as string[])[0];
 				}
 			}
 
