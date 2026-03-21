@@ -17,15 +17,8 @@ import type {
 	CustomerData,
 	Delivery,
 	GenericPrice,
-	NodeDelivery,
-	NodeLineItem,
-	NodeTransaction,
-	OrderCreatePayload,
 	Transaction,
-	OrderUpdatePayload,
-	LineItem,
 	OrderResponse,
-	NodeCustomerAddressDetails,
 } from './types';
 import { apiRequest } from '../../transport';
 import { orderFields } from './fields';
@@ -39,6 +32,18 @@ import {
 	getCustomerByNumber,
 	getPrePaymentOrderStates,
 } from '../../helpers/utils';
+import { extractOrderUpdateParams } from '../../helpers/params';
+import {
+	buildLineItemPayload,
+	buildDeliveryPayload,
+	buildOrderAddressPayload,
+	buildTransactionPayload,
+	buildOrderPrice,
+	buildOrderUpdatePayload,
+	aggregateDeliveryShippingCostsWithExisting,
+	cleanPayload,
+} from '../../helpers/payloadBuilders';
+import { calculateOrderTotals } from '../../helpers/pricing';
 
 const properties: INodeProperties[] = [
 	{
@@ -429,211 +434,116 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
-			const id = this.getNodeParameter('id', i) as string;
+			const params = extractOrderUpdateParams.call(this, i);
 
+			// 1. Fetch previous order
 			const searchPrevOrderBody = {
-				filter: [{ type: 'equals', field: 'id', value: id }],
-				associations: {
-					currency: {},
-				},
+				filter: [{ type: 'equals', field: 'id', value: params.id }],
+				associations: { currency: {} },
 			};
-
-            const prevOrder = (await apiRequest.call(this, 'POST', `/search/order`, searchPrevOrderBody)).data[0] as OrderResponse;
-            if (!prevOrder) {
+			const prevOrder = (await apiRequest.call(this, 'POST', `/search/order`, searchPrevOrderBody)).data[0] as OrderResponse;
+			if (!prevOrder) {
 				throw new NodeOperationError(this.getNode(), 'Order does not exist', {
-					description: 'There is no order with id ' + id,
+					description: 'There is no order with id ' + params.id,
 					itemIndex: i,
 				});
-            }
-
-			const { state: orderState, ...updateFields } = this.getNodeParameter('updateFields', i);
+			}
 
 			const {
 				currency: currencyData,
 				shippingCosts: shippingData,
 				orderCustomer: prevOrderCustomer,
 				...previousOrderData
-			} =	prevOrder;
+			} = prevOrder;
 
+			// 2. Resolve address updates
 			const customerData: Partial<CustomerData> = {};
-
-			const customerBillingAddress = (
-				updateFields.billingAddressUi as {
-					billingAddressValues: NodeCustomerAddressDetails;
-				} | null
-			)?.billingAddressValues;
-			const customerShippingAddress = (
-				updateFields.shippingAddressUi as {
-					shippingAddressValues: NodeCustomerAddressDetails;
-				} | null
-			)?.shippingAddressValues;
-			if (customerBillingAddress) {
+			if (params.billingAddress) {
 				const prePaymentStates = await getPrePaymentOrderStates.call(this);
-
 				if (prePaymentStates.includes(previousOrderData.stateId)) {
 					customerData.billingAddress = {
 						id: uuidv7(),
-						countryId: customerBillingAddress.country,
-						firstName: customerBillingAddress.firstName,
-						lastName: customerBillingAddress.lastName,
-						city: customerBillingAddress.city,
-						street: customerBillingAddress.street,
+						countryId: params.billingAddress.country,
+						firstName: params.billingAddress.firstName,
+						lastName: params.billingAddress.lastName,
+						city: params.billingAddress.city,
+						street: params.billingAddress.street,
 					};
 				}
 			}
-			if (customerShippingAddress) {
+			if (params.shippingAddress) {
 				customerData.shippingAddress = {
 					id: uuidv7(),
-					countryId: customerShippingAddress.country,
-					firstName: customerShippingAddress.firstName,
-					lastName: customerShippingAddress.lastName,
-					city: customerShippingAddress.city,
-					street: customerShippingAddress.street,
+					countryId: params.shippingAddress.country,
+					firstName: params.shippingAddress.firstName,
+					lastName: params.shippingAddress.lastName,
+					city: params.shippingAddress.city,
+					street: params.shippingAddress.street,
 				};
 			}
 
-			const nodeLineItems = (
-				updateFields.lineItems as { lineItem: Array<NodeLineItem> | null } | null
-			)?.lineItem;
-
+			// 3. Build line items and order pricing
+			let lineItems: ReturnType<typeof buildLineItemPayload>[] = [];
+			let price: ReturnType<typeof buildOrderPrice> | null = null;
 			let transactions: Transaction[] = [];
-			const nodeTransactions = (
-				updateFields.transactions as { transaction: Array<NodeTransaction> | null } | null
-			)?.transaction;
 
-			let lineItems: LineItem[] = [];
-			let price: OrderCreatePayload['price'] | null = null;
-
-			if (nodeLineItems) {
+			if (params.nodeLineItems) {
 				lineItems = await Promise.all(
-					nodeLineItems.map(async (lineItem) => {
-						const { identifier, productId, label, states, unitPrice, taxRate } =
-							await getLineItemData.call(this, lineItem.productNumber, currencyData.id, i);
-
-						const quantity = lineItem.quantity;
-						const totalPrice = unitPrice * quantity;
-						const tax = totalPrice * (taxRate / 100);
-						const taxPrice = totalPrice + tax;
-
-						const price = {
-							unitPrice,
-							totalPrice,
-							quantity,
-							calculatedTaxes: [
-								{
-									tax,
-									taxRate,
-									price: taxPrice,
-								},
-							],
-							taxRules: [
-								{
-									taxRate,
-									percentage: 100,
-								},
-							],
-						};
-
-						return {
-							identifier,
-							productId,
-							quantity,
-							label,
-							states,
-							price,
-						};
+					params.nodeLineItems.map(async (lineItem) => {
+						const itemData = await getLineItemData.call(this, lineItem.productNumber, currencyData.id, i);
+						return buildLineItemPayload({ ...itemData, quantity: lineItem.quantity });
 					}),
 				);
 
 				const defaultTaxRate = await getDefaultTaxRate.call(this);
 				const totalPrice =
-					lineItems.reduce((acc, item) => acc + item.price.totalPrice, 0) +
+					calculateOrderTotals(lineItems) +
 					previousOrderData.amountNet;
 				const orderTax = totalPrice * (defaultTaxRate / 100);
 				const taxPrice = totalPrice + orderTax;
 				const quantity = lineItems.reduce((acc, item) => acc + item.quantity, 0);
 
-				price = {
-					netPrice: totalPrice,
-					totalPrice: taxPrice,
-					calculatedTaxes: [
-						{
-							tax: orderTax,
-							taxRate: defaultTaxRate,
-							price: taxPrice,
-						},
-					],
-					taxRules: [
-						{
-							taxRate: defaultTaxRate,
-							percentage: 100,
-						},
-					],
-					positionPrice: totalPrice,
-					rawTotal: totalPrice,
-					taxStatus: 'gross',
-				};
+				price = buildOrderPrice({ totalPrice, orderTax, defaultTaxRate, taxPrice });
 
-				if (nodeTransactions && nodeTransactions.length > 0) {
-					transactions = nodeTransactions.map((transaction) => {
-						const amount = {
-							unitPrice: totalPrice,
-							totalPrice: taxPrice,
-							quantity: quantity,
-							calculatedTaxes: [
-								{
-									tax: orderTax,
-									taxRate: defaultTaxRate,
-									price: taxPrice,
-								},
-							],
-							taxRules: [
-								{
-									taxRate: defaultTaxRate,
-									percentage: 100,
-								},
-							],
-						};
-
-						return {
+				if (params.nodeTransactions && params.nodeTransactions.length > 0) {
+					transactions = params.nodeTransactions.map((transaction) =>
+						buildTransactionPayload({
 							paymentMethodId: transaction.paymentMethod,
 							stateId: transaction.state,
-							amount,
-						};
-					});
+							totalPrice, taxPrice, orderTax, defaultTaxRate, quantity,
+						}),
+					);
 				}
 			}
 
-			if (!nodeLineItems && nodeTransactions) {
+			if (!params.nodeLineItems && params.nodeTransactions) {
 				throw new NodeOperationError(this.getNode(), 'Missing line items for transaction', {
 					description: 'Line items are required for order transactions',
 					itemIndex: i,
 				});
 			}
 
+			// 4. Build addresses
 			const addresses: Address[] = [];
-			if (customerShippingAddress && customerData.shippingAddress) {
-				addresses.push({
+			if (params.shippingAddress && customerData.shippingAddress) {
+				addresses.push(buildOrderAddressPayload({
 					id: customerData.shippingAddress.id,
 					countryId: customerData.shippingAddress.countryId,
 					firstName: customerData.shippingAddress.firstName,
 					lastName: customerData.shippingAddress.lastName,
 					city: customerData.shippingAddress.city,
 					street: customerData.shippingAddress.street,
-				});
+				}));
 			}
 
+			// 5. Build deliveries and shipping costs
 			let deliveries: Delivery[] = [];
-			const nodeDeliveries = (
-				updateFields.deliveries as { delivery: Array<NodeDelivery> | null } | null
-			)?.delivery;
-
 			let shippingCosts: GenericPrice | null = null;
-			if (nodeDeliveries && nodeDeliveries.length > 0) {
-				deliveries = await Promise.all(
-					nodeDeliveries.map(async (delivery) => {
-						let shippingOrderAddressId: string;
 
+			if (params.nodeDeliveries && params.nodeDeliveries.length > 0) {
+				deliveries = await Promise.all(
+					params.nodeDeliveries.map(async (delivery) => {
+						let shippingOrderAddressId: string;
 						if (delivery.customerShippingAddress) {
 							if (addresses.length > 0) {
 								shippingOrderAddressId = addresses[0].id;
@@ -646,184 +556,82 @@ export async function execute(
 							const address = delivery.addressUi.addressValues;
 							if (!address) {
 								throw new NodeOperationError(this.getNode(), 'Missing shipping address', {
-									description:
-										'A shipping address must be provided for the selected delivery if not using the customer one',
+									description: 'A shipping address must be provided for the selected delivery if not using the customer one',
 									itemIndex: i,
 								});
 							}
-
 							for (const key in address) {
 								if (address[key as keyof AddressValues] === '') {
-									throw new NodeOperationError(
-										this.getNode(),
-										'Missing required value for shipping address',
-										{
-											description: `Shipping address ${key} must be a valid value.`,
-											itemIndex: i,
-										},
-									);
+									throw new NodeOperationError(this.getNode(), 'Missing required value for shipping address', {
+										description: `Shipping address ${key} must be a valid value.`,
+										itemIndex: i,
+									});
 								}
 							}
-
 							shippingOrderAddressId = uuidv7();
-							addresses.push({
+							addresses.push(buildOrderAddressPayload({
 								id: shippingOrderAddressId,
 								countryId: address.country,
 								firstName: address.firstName,
 								lastName: address.lastName,
 								city: address.city,
 								street: address.street,
-							});
+							}));
 						}
-
-						const { ['unitPrice']: shippingPrice, ['taxRate']: shippingTaxRate } =
-							await getShippingMethodData.call(this, delivery.shippingMethod, currencyData.id);
-
+						const shippingMethodData = await getShippingMethodData.call(this, delivery.shippingMethod, currencyData.id);
 						const deliveryTime = await getShippingDeliveryTime.call(this, delivery.shippingMethod);
-						const shippingTax = shippingPrice * (shippingTaxRate / 100);
-						const shippingTaxPrice = shippingPrice + shippingTax;
-
-						const shippingCosts = {
-							unitPrice: shippingPrice,
-							totalPrice: shippingPrice,
-							quantity: 1,
-							calculatedTaxes: [
-								{
-									tax: shippingTax,
-									taxRate: shippingTaxRate,
-									price: shippingTaxPrice,
-								},
-							],
-							taxRules: [
-								{
-									taxRate: shippingTaxRate,
-									percentage: 100,
-								},
-							],
-						};
-
-						const shippingDateEarliest = new Date();
-						const shippingDateLatest = new Date();
-						switch (deliveryTime.unit) {
-							case 'hour':
-								shippingDateEarliest.setHours(shippingDateEarliest.getHours() + deliveryTime.min);
-								shippingDateLatest.setHours(shippingDateLatest.getHours() + deliveryTime.max);
-								break;
-							case 'day':
-								shippingDateEarliest.setDate(shippingDateEarliest.getDate() + deliveryTime.min);
-								shippingDateLatest.setDate(shippingDateLatest.getDate() + deliveryTime.max);
-								break;
-							case 'week':
-								shippingDateEarliest.setDate(shippingDateEarliest.getDate() + deliveryTime.min * 7);
-								shippingDateLatest.setDate(shippingDateLatest.getDate() + deliveryTime.max * 7);
-								break;
-						}
-
-						return {
+						return buildDeliveryPayload({
 							shippingOrderAddressId,
 							shippingMethodId: delivery.shippingMethod,
 							stateId: delivery.state,
-							shippingDateEarliest,
-							shippingDateLatest,
-							shippingCosts,
-						};
+							shippingPrice: shippingMethodData.unitPrice,
+							shippingTaxRate: shippingMethodData.taxRate,
+							deliveryTime,
+						});
 					}),
 				);
 
-				const deliveriesUnitPrice =
-					deliveries.reduce((acc, delivery) => acc + delivery.shippingCosts.unitPrice, 0) +
-					shippingData.unitPrice;
-				const deliveriesTax =
-					deliveries.reduce(
-						(acc, delivery) => acc + delivery.shippingCosts.calculatedTaxes[0].tax,
-						0,
-					) + shippingData.calculatedTaxes[0].tax;
-				const deliveriesTaxRate = deliveries[0].shippingCosts.taxRules[0].taxRate;
-				const deliveriesTaxPrice = deliveriesUnitPrice + deliveriesTax;
-
-				shippingCosts = {
-					unitPrice: deliveriesUnitPrice,
-					totalPrice: deliveriesUnitPrice,
-					quantity: 1,
-					calculatedTaxes: [
-						{
-							tax: deliveriesTax,
-							taxRate: deliveriesTaxRate,
-							price: deliveriesTaxPrice,
-						},
-					],
-					taxRules: [
-						{
-							taxRate: deliveriesTaxRate,
-							percentage: 100,
-						},
-					],
-				};
+				shippingCosts = aggregateDeliveryShippingCostsWithExisting(deliveries, shippingData);
 			}
 
-			let serializedBillingAddress: Address | null = null;
-			if (customerData.billingAddress) {
-				serializedBillingAddress = {
-					id: customerData.billingAddress.id,
-					countryId: customerData.billingAddress.countryId,
-					firstName: customerData.billingAddress.firstName,
-					lastName: customerData.billingAddress.lastName,
-					city: customerData.billingAddress.city,
-					street: customerData.billingAddress.street,
-				};
-			}
-
-			const updateBody: OrderUpdatePayload = {
-				billingAddressId: customerData.billingAddress ? customerData.billingAddress.id : null,
-				billingAddress: serializedBillingAddress,
+			// 6. Assemble update payload
+			const updateBody = buildOrderUpdatePayload({
+				customerData,
 				lineItems,
 				price,
 				shippingCosts,
 				transactions,
 				deliveries,
 				addresses,
-			};
+			});
 
-			const searchBody = {
-				fields: orderFields,
-				includes: {
-					order: orderFields,
-				},
-				filter: [{ type: 'equals', field: 'id', value: id }],
-			};
+			cleanPayload(updateBody, true);
 
-			for (const key in updateBody) {
-				const typedKey = key as keyof OrderCreatePayload;
-
-				if (
-					Array.isArray(updateBody[typedKey]) &&
-					(updateBody[typedKey] as Array<unknown>).length === 0
-				) {
-					delete updateBody[typedKey];
-				} else if (updateBody[typedKey] === '' || updateBody[typedKey] === null) {
-					delete updateBody[typedKey];
-				}
-			}
-
-			if (orderState) {
+			// 7. State transition and update
+			if (params.orderState) {
 				await apiRequest.call(
 					this,
 					'POST',
-					`/_action/order/${previousOrderData.id}/state/${orderState}`,
+					`/_action/order/${previousOrderData.id}/state/${params.orderState}`,
 				);
 			}
 
-            if (orderState === '') {
+			if (params.orderState === '') {
 				throw new NodeOperationError(this.getNode(), 'Invalid order state', {
 					description: 'Please specify a valid order state from the list',
 					itemIndex: i,
 				});
-            }
-
-			if (Object.keys(updateFields).length !== 0) {
-				await apiRequest.call(this, 'PATCH', `/order/${id}`, updateBody);
 			}
 
+			if (Object.keys(params.updateFields).length !== 0) {
+				await apiRequest.call(this, 'PATCH', `/order/${params.id}`, updateBody);
+			}
+
+			const searchBody = {
+				fields: orderFields,
+				includes: { order: orderFields },
+				filter: [{ type: 'equals', field: 'id', value: params.id }],
+			};
 			const response = await apiRequest.call(this, 'POST', `/search/order`, searchBody);
 
 			const executionData = this.helpers.constructExecutionMetaData(wrapData(response.data), {

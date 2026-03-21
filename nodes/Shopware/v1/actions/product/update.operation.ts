@@ -13,10 +13,11 @@ import {
 	NodeApiError,
 	NodeOperationError,
 } from 'n8n-workflow';
-import type { NodePrice, ProductUpdatePayload } from './types';
 import { getProductTaxRate, wrapData } from '../../helpers/utils';
 import { productFields } from './fields';
 import { apiRequest } from '../../transport';
+import { extractProductUpdateParams } from '../../helpers/params';
+import { buildProductUpdatePayload, applyAutoNetPrices, cleanPayload } from '../../helpers/payloadBuilders';
 
 const properties: INodeProperties[] = [
 	{
@@ -237,75 +238,17 @@ export async function execute(
 				});
 			}
 
-			const updateFields = this.getNodeParameter('updateFields', i);
+			const { updateFields } = extractProductUpdateParams.call(this, i);
 
-			const updateBody: ProductUpdatePayload = {
-				parentId: updateFields.parentId as string,
-				ean: updateFields.ean as string,
-				name: updateFields.name as string,
-				description: updateFields.description as string,
-				price: [
-					...((
-						updateFields.prices as {
-							price: Array<NodePrice> | null;
-						} | null
-					)?.price
-						? (
-								updateFields.prices as {
-									price: Array<NodePrice>;
-								}
-							).price.map((price) => ({
-								currencyId: price.currency,
-								gross: price.grossPrice,
-								net: price.autoCalculateNet ? 0 : price.netPrice,
-								linked: true,
-							}))
-						: []),
-				],
-				taxId: updateFields.taxRate ? (JSON.parse(updateFields.taxRate as string) as string[])[0] : undefined,
-				manufacturer: (updateFields.manufacturer as string)
-					? {
-							name: updateFields.manufacturer as string,
-						}
-					: undefined,
-				stock: updateFields.stock as number,
-				categories: (updateFields.categories as string[])?.map((category) => {
-					const categoryData = JSON.parse(category) as string[];
-					return {
-						id: categoryData[0],
-						name: categoryData[1],
-					};
-				}),
-				visibilities: (updateFields.salesChannels as string[])?.map((salesChannelId) => ({
-					salesChannelId,
-					visibility: 30,
-				})),
-				active: updateFields.active as boolean,
-			};
-
-			for (const key in updateBody) {
-				const typedKey = key as keyof ProductUpdatePayload;
-
-				if (
-					Array.isArray(updateBody[typedKey]) &&
-					(updateBody[typedKey] as Array<unknown>).length === 0
-				) {
-					delete updateBody[typedKey];
-				} else if (updateBody[typedKey] === '') {
-					delete updateBody[typedKey];
-				}
-			}
+			const updateBody = buildProductUpdatePayload(updateFields);
+			cleanPayload(updateBody);
 
 			if (updateBody.price) {
 				const taxRate = updateFields.taxRate
 					? parseFloat((JSON.parse(updateFields.taxRate as string) as string[])[2])
 					: await getProductTaxRate.call(this, id);
 
-				updateBody.price.forEach((price) => {
-					if (price.net === 0) {
-						price.net = parseFloat((price.gross / (1 + taxRate / 100)).toFixed(2));
-					}
-				});
+				applyAutoNetPrices(updateBody.price, taxRate);
 			}
 
 			await apiRequest.call(this, 'PATCH', `/product/${id}`, updateBody);

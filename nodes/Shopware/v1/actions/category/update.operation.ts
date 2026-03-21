@@ -11,10 +11,11 @@ import {
 	NodeApiError,
 	NodeOperationError,
 } from 'n8n-workflow';
-import type { CategoryUpdatePayload } from './types';
 import { wrapData } from '../../helpers/utils';
 import { categoryFields } from './fields';
 import { apiRequest } from '../../transport';
+import { extractCategoryUpdateParams } from '../../helpers/params';
+import { buildCategoryUpdatePayload, cleanPayload } from '../../helpers/payloadBuilders';
 
 const properties: INodeProperties[] = [
 	{
@@ -89,18 +90,15 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
-			const id = this.getNodeParameter('id', i) as string;
+			const { id, updateFields } = extractCategoryUpdateParams.call(this, i);
 
 			const searchBody = {
 				fields: categoryFields,
-				includes: {
-					category: categoryFields,
-				},
+				includes: { category: categoryFields },
 				filter: [{ type: 'equals', field: 'id', value: id }],
 			};
 
-			const category = (await apiRequest.call(this, 'POST', `/search/category`, searchBody))
-				.data[0];
+			const category = (await apiRequest.call(this, 'POST', `/search/category`, searchBody)).data[0];
 			if (!category) {
 				throw new NodeOperationError(this.getNode(), 'Category does not exist', {
 					description: 'There is no category with id ' + id,
@@ -108,22 +106,7 @@ export async function execute(
 				});
 			}
 
-			const updateFields = this.getNodeParameter('updateFields', i);
-
-			const updateBody: CategoryUpdatePayload = {
-				active: updateFields.active as boolean,
-				parentId: updateFields.parentId ? (JSON.parse(updateFields.parentId as string) as string[])[0] : '',
-				name: updateFields.name as string,
-				description: updateFields.description as string,
-			};
-
-			for (const key in updateBody) {
-				const typedKey = key as keyof CategoryUpdatePayload;
-
-				if (updateBody[typedKey] === '') {
-					delete updateBody[typedKey];
-				}
-			}
+			const updateBody = cleanPayload(buildCategoryUpdatePayload(updateFields));
 
 			await apiRequest.call(this, 'PATCH', `/category/${id}`, updateBody);
 

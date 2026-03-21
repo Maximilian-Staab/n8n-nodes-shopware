@@ -11,10 +11,11 @@ import {
 	updateDisplayOptions,
 	NodeOperationError,
 } from 'n8n-workflow';
-import type { NodeCustomerAddress, CustomerCreatePayload } from './types';
 import { apiRequest } from '../../transport';
 import { customerFields } from './fields';
 import { getDefaultSalutationId, uuidv7, wrapData } from '../../helpers/utils';
+import { extractCustomerCreateParams } from '../../helpers/params';
+import { buildCustomerAddresses, buildCustomerCreatePayload, cleanPayload } from '../../helpers/payloadBuilders';
 
 const properties: INodeProperties[] = [
 	{
@@ -202,97 +203,64 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
-			let defaultShippingAddressId: string | null = null;
-			let defaultBillingAddressId: string | null = null;
+			const params = extractCustomerCreateParams.call(this, i);
 
-			const nodeAddresses = (
-				this.getNodeParameter('addresses', i) as {
-					address: Array<NodeCustomerAddress> | null;
-				}
-			).address;
-
-			const email = this.getNodeParameter('email', i) as string;
-
-			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(params.email)) {
 				throw new NodeOperationError(this.getNode(), 'Invalid email address', {
-					description: `The email address '${email}' in the 'email' field isn't valid`,
+					description: `The email address '${params.email}' in the 'email' field isn't valid`,
 					itemIndex: i,
 				});
 			}
 
-			if (!nodeAddresses || nodeAddresses.length === 0) {
+			if (!params.nodeAddresses || params.nodeAddresses.length === 0) {
 				throw new NodeOperationError(this.getNode(), 'Missing default address', {
 					description: 'At least one address must be provided',
 					itemIndex: i,
 				});
 			}
 
-			let salutationId = this.getNodeParameter('salutation', i) as string;
-
+			let salutationId = params.salutation;
 			if (!salutationId) {
 				salutationId = await getDefaultSalutationId.call(this);
 			}
-			const addresses = nodeAddresses.map((address) => {
-				const addressId = uuidv7();
 
-				if (address.defaultShippingAddress) {
-					if (defaultShippingAddressId) {
-						throw new NodeOperationError(this.getNode(), 'Duplicate default shipping address', {
-							description: 'Only one address can be a default shipping address',
-							itemIndex: i,
-						});
-					}
-					defaultShippingAddressId = addressId;
-				}
+			const addressResult = buildCustomerAddresses(
+				params.nodeAddresses,
+				salutationId,
+				uuidv7,
+				this.getNode(),
+				i,
+			);
 
-				if (address.defaultBillingAddress) {
-					if (defaultBillingAddressId) {
-						throw new NodeOperationError(this.getNode(), 'Duplicate default billing address', {
-							description: 'Only one address can be a default billing address',
-							itemIndex: i,
-						});
-					}
-					defaultBillingAddressId = addressId;
-				}
-
-				return {
-					id: addressId,
-					countryId: address.country,
-					firstName: address.firstName,
-					lastName: address.lastName,
-					city: address.city,
-					street: address.street,
-					salutationId
-				};
-			});
-
-			if (!defaultShippingAddressId) {
+			if (!addressResult.defaultShippingAddressId) {
 				throw new NodeOperationError(this.getNode(), 'Missing default shipping address', {
 					description: 'Customer must have a default shipping address',
 					itemIndex: i,
 				});
 			}
-			if (!defaultBillingAddressId) {
+			if (!addressResult.defaultBillingAddressId) {
 				throw new NodeOperationError(this.getNode(), 'Missing default billing address', {
 					description: 'Customer must have a default billing address',
 					itemIndex: i,
 				});
 			}
 
-			const createBody: CustomerCreatePayload = {
-				firstName: this.getNodeParameter('firstName', i) as string,
-				lastName: this.getNodeParameter('lastName', i) as string,
-				email,
-				customerNumber: this.getNodeParameter('customerNumber', i) as string,
-				defaultPaymentMethodId: this.getNodeParameter('paymentMethod', i) as string,
-				languageId: this.getNodeParameter('language', i) as string,
-				salesChannelId: this.getNodeParameter('salesChannel', i) as string,
+			const createBody = buildCustomerCreatePayload({
+				firstName: params.firstName,
+				lastName: params.lastName,
+				email: params.email,
+				customerNumber: params.customerNumber,
+				paymentMethod: params.paymentMethod,
+				language: params.language,
+				salesChannel: params.salesChannel,
 				salutationId,
-				groupId: this.getNodeParameter('group', i) as string,
-				defaultShippingAddressId,
-				defaultBillingAddressId,
-				addresses,
-			};
+				group: params.group,
+				defaultShippingAddressId: addressResult.defaultShippingAddressId,
+				defaultBillingAddressId: addressResult.defaultBillingAddressId,
+				addresses: addressResult.addresses,
+			});
+
+			cleanPayload(createBody);
 
 			const searchBody = {
 				fields: customerFields,
@@ -301,19 +269,6 @@ export async function execute(
 				},
 				filter: [{ type: 'equals', field: 'customerNumber', value: createBody.customerNumber }],
 			};
-
-			for (const key in createBody) {
-				const typedKey = key as keyof CustomerCreatePayload;
-
-				if (
-					Array.isArray(createBody[typedKey]) &&
-					(createBody[typedKey] as Array<unknown>).length === 0
-				) {
-					delete createBody[typedKey];
-				} else if (createBody[typedKey] === '') {
-					delete createBody[typedKey];
-				}
-			}
 
 			await apiRequest.call(this, 'POST', `/customer`, createBody);
 

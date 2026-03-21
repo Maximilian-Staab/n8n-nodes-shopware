@@ -19,14 +19,7 @@ import type {
 	Delivery,
 	GenericPrice,
 	GlobalDefaults,
-	NodeCustomerAddressDetails,
-	NodeCustomerDetails,
-	NodeDelivery,
-	NodeLineItem,
-	NodeTransaction,
-	OrderCreatePayload,
 	OrderCustomer,
-	Rounding,
 	Transaction,
 } from './types';
 import { apiRequest } from '../../transport';
@@ -42,6 +35,18 @@ import {
 	getDefaultShippingMethod,
 	getDefaultLanguageId,
 } from '../../helpers/utils';
+import {
+	buildLineItemPayload,
+	buildDeliveryPayload,
+	buildOrderAddressPayload,
+	buildTransactionPayload,
+	aggregateDeliveryShippingCosts,
+	buildOrderPrice,
+	buildOrderCreatePayload,
+	cleanPayload,
+} from '../../helpers/payloadBuilders';
+import { buildGenericPrice } from '../../helpers/pricing';
+import { extractOrderCreateParams } from '../../helpers/params';
 
 const properties: INodeProperties[] = [
 	{
@@ -528,89 +533,65 @@ export async function execute(
 	for (let i = 0; i < items.length; i++) {
 		try {
 			const orderId = uuidv7();
+			const params = extractOrderCreateParams.call(this, i);
+
+			// 1. Resolve customer data and order customer
 			const customerData: Partial<CustomerData> = {};
 			const globalDefaults: Partial<GlobalDefaults> = {};
 			let orderCustomer: OrderCustomer;
 
-			const customerNumber = (!this.getNodeParameter('guestOrder', i) as boolean)
-				? (this.getNodeParameter('customerNumber', i) as string)
-				: null;
-
-			if (customerNumber) {
-				const customer = await getCustomerByNumber.call(this, customerNumber, i);
-
+			if (params.customerNumber) {
+				const customer = await getCustomerByNumber.call(this, params.customerNumber, i);
 				globalDefaults.languageId = customer.languageId;
 				globalDefaults.salesChannelId = customer.salesChannelId;
-
 				customerData.firstName = customer.firstName;
 				customerData.lastName = customer.lastName;
 				customerData.email = customer.email;
 				customerData.salutationId = customer.salutationId;
 				customerData.billingAddress = customer.billingAddress;
 				customerData.shippingAddress = customer.shippingAddress;
-
 				orderCustomer = {
 					firstName: customer.firstName,
 					lastName: customer.lastName,
 					email: customer.email,
 					salutationId: customer.salutationId,
 					customerId: customer.id,
-					customerNumber,
+					customerNumber: params.customerNumber,
 				};
 			} else {
-				const guest = (this.getNodeParameter('guestUi', i) as { guestValues: NodeCustomerDetails })
-					.guestValues;
-				const guestBillingAddress = (
-					this.getNodeParameter('billingAddressUi', i) as {
-						billingAddressValues: NodeCustomerAddressDetails;
-					}
-				).billingAddressValues;
-				const guestShippingAddress = (
-					this.getNodeParameter('shippingAddressUi', i) as {
-						shippingAddressValues: NodeCustomerAddressDetails;
-					}
-				).shippingAddressValues;
-
 				globalDefaults.languageId = await getDefaultLanguageId.call(this);
-				globalDefaults.salesChannelId = this.getNodeParameter('salesChannel', i) as string;
-
-				customerData.firstName = guest.firstName;
-				customerData.lastName = guest.lastName;
-				customerData.email = guest.email;
-				customerData.salutationId = guest.salutation;
+				globalDefaults.salesChannelId = params.salesChannel!;
+				customerData.firstName = params.guest!.firstName;
+				customerData.lastName = params.guest!.lastName;
+				customerData.email = params.guest!.email;
+				customerData.salutationId = params.guest!.salutation;
 				customerData.billingAddress = {
 					id: uuidv7(),
-					countryId: guestBillingAddress.country,
-					firstName: guestBillingAddress.firstName,
-					lastName: guestBillingAddress.lastName,
-					city: guestBillingAddress.city,
-					street: guestBillingAddress.street,
+					countryId: params.guestBillingAddress!.country,
+					firstName: params.guestBillingAddress!.firstName,
+					lastName: params.guestBillingAddress!.lastName,
+					city: params.guestBillingAddress!.city,
+					street: params.guestBillingAddress!.street,
 				};
 				customerData.shippingAddress = {
 					id: uuidv7(),
-					countryId: guestShippingAddress.country,
-					firstName: guestShippingAddress.firstName,
-					lastName: guestShippingAddress.lastName,
-					city: guestShippingAddress.city,
-					street: guestShippingAddress.street,
+					countryId: params.guestShippingAddress!.country,
+					firstName: params.guestShippingAddress!.firstName,
+					lastName: params.guestShippingAddress!.lastName,
+					city: params.guestShippingAddress!.city,
+					street: params.guestShippingAddress!.street,
 				};
-
 				orderCustomer = {
-					firstName: guest.firstName,
-					lastName: guest.lastName,
-					email: guest.email,
-					salutationId: guest.salutation,
+					firstName: params.guest!.firstName,
+					lastName: params.guest!.lastName,
+					email: params.guest!.email,
+					salutationId: params.guest!.salutation,
 					customerNumber: 'guest-' + randomString(6),
 				};
 			}
 
-			const currencyData = JSON.parse(this.getNodeParameter('currency', i) as string) as string[];
-
-			const nodeLineItems = (
-				this.getNodeParameter('lineItems', i) as { lineItem: Array<NodeLineItem> | null }
-			).lineItem;
-
-			if (!nodeLineItems || nodeLineItems.length === 0) {
+			// 2. Build line items
+			if (!params.nodeLineItems || params.nodeLineItems.length === 0) {
 				throw new NodeOperationError(this.getNode(), 'Missing order line items', {
 					description: 'At least one line item must be provided',
 					itemIndex: i,
@@ -618,125 +599,49 @@ export async function execute(
 			}
 
 			const lineItems = await Promise.all(
-				nodeLineItems.map(async (lineItem) => {
-					const { identifier, productId, label, states, unitPrice, taxRate } =
-						await getLineItemData.call(this, lineItem.productNumber, currencyData[0], i);
-
-					const quantity = lineItem.quantity;
-					const totalPrice = unitPrice * quantity;
-					const tax = totalPrice * (taxRate / 100);
-					const taxPrice = totalPrice + tax;
-
-					const price = {
-						unitPrice,
-						totalPrice,
-						quantity,
-						calculatedTaxes: [
-							{
-								tax,
-								taxRate,
-								price: taxPrice,
-							},
-						],
-						taxRules: [
-							{
-								taxRate,
-								percentage: 100,
-							},
-						],
-					};
-
-					return {
-						identifier,
-						productId,
-						quantity,
-						label,
-						states,
-						price,
-					};
+				params.nodeLineItems.map(async (lineItem) => {
+					const itemData = await getLineItemData.call(this, lineItem.productNumber, params.currencyData[0], i);
+					return buildLineItemPayload({ ...itemData, quantity: lineItem.quantity });
 				}),
 			);
 
+			// 3. Calculate order-level pricing
 			const defaultTaxRate = await getDefaultTaxRate.call(this);
 			const totalPrice = lineItems.reduce((acc, item) => acc + item.price.totalPrice, 0);
 			const orderTax = totalPrice * (defaultTaxRate / 100);
 			const taxPrice = totalPrice + orderTax;
 			const quantity = lineItems.reduce((acc, item) => acc + item.quantity, 0);
 
-			const price = {
-				netPrice: totalPrice,
-				totalPrice: taxPrice,
-				calculatedTaxes: [
-					{
-						tax: orderTax,
-						taxRate: defaultTaxRate,
-						price: taxPrice,
-					},
-				],
-				taxRules: [
-					{
-						taxRate: defaultTaxRate,
-						percentage: 100,
-					},
-				],
-				positionPrice: totalPrice,
-				rawTotal: totalPrice,
-				taxStatus: 'gross',
-			};
+			const price = buildOrderPrice({ totalPrice, orderTax, defaultTaxRate, taxPrice });
 
+			// 4. Build transactions
 			let transactions: Transaction[] = [];
-			const nodeTransactions = (
-				this.getNodeParameter('transactions', i) as { transaction: Array<NodeTransaction> | null }
-			).transaction;
-
-			if (nodeTransactions && nodeTransactions.length > 0) {
-				transactions = nodeTransactions.map((transaction) => {
-					const amount = {
-						unitPrice: totalPrice,
-						totalPrice: taxPrice,
-						quantity,
-						calculatedTaxes: [
-							{
-								tax: orderTax,
-								taxRate: defaultTaxRate,
-								price: taxPrice,
-							},
-						],
-						taxRules: [
-							{
-								taxRate: defaultTaxRate,
-								percentage: 100,
-							},
-						],
-					};
-
-					return {
+			if (params.nodeTransactions && params.nodeTransactions.length > 0) {
+				transactions = params.nodeTransactions.map((transaction) =>
+					buildTransactionPayload({
 						paymentMethodId: transaction.paymentMethod,
 						stateId: transaction.state,
-						amount,
-					};
-				});
+						totalPrice, taxPrice, orderTax, defaultTaxRate, quantity,
+					}),
+				);
 			}
 
+			// 5. Build addresses and deliveries
 			const addresses: Address[] = [
-				{
-					id: customerData.shippingAddress.id,
-					countryId: customerData.shippingAddress.countryId,
-					firstName: customerData.shippingAddress.firstName,
-					lastName: customerData.shippingAddress.lastName,
-					city: customerData.shippingAddress.city,
-					street: customerData.shippingAddress.street,
-				},
+				buildOrderAddressPayload({
+					id: customerData.shippingAddress!.id,
+					countryId: customerData.shippingAddress!.countryId,
+					firstName: customerData.shippingAddress!.firstName,
+					lastName: customerData.shippingAddress!.lastName,
+					city: customerData.shippingAddress!.city,
+					street: customerData.shippingAddress!.street,
+				}),
 			];
 
 			let deliveries: Delivery[] = [];
-			const nodeDeliveries = (
-				this.getNodeParameter('deliveries', i) as { delivery: Array<NodeDelivery> | null }
-			).delivery;
-
-			if (nodeDeliveries && nodeDeliveries.length > 0) {
+			if (params.nodeDeliveries && params.nodeDeliveries.length > 0) {
 				deliveries = await Promise.all(
-					nodeDeliveries.map(async (delivery) => {
+					params.nodeDeliveries.map(async (delivery) => {
 						let shippingOrderAddressId: string;
 
 						if (delivery.customerShippingAddress) {
@@ -745,214 +650,80 @@ export async function execute(
 							const address = delivery.addressUi.addressValues;
 							if (!address) {
 								throw new NodeOperationError(this.getNode(), 'Missing shipping address', {
-									description:
-										'A shipping address must be provided for the selected delivery if not using the customer one',
+									description: 'A shipping address must be provided for the selected delivery if not using the customer one',
 									itemIndex: i,
 								});
 							}
-
 							for (const key in address) {
 								if (address[key as keyof AddressValues] === '') {
-									throw new NodeOperationError(
-										this.getNode(),
-										'Missing required value for shipping address',
-										{
-											description: `Shipping address ${key} must be a valid value.`,
-											itemIndex: i,
-										},
-									);
+									throw new NodeOperationError(this.getNode(), 'Missing required value for shipping address', {
+										description: `Shipping address ${key} must be a valid value.`,
+										itemIndex: i,
+									});
 								}
 							}
-
 							shippingOrderAddressId = uuidv7();
-							addresses.push({
+							addresses.push(buildOrderAddressPayload({
 								id: shippingOrderAddressId,
 								countryId: address.country,
 								firstName: address.firstName,
 								lastName: address.lastName,
 								city: address.city,
 								street: address.street,
-							});
+							}));
 						}
-
-						const { ['unitPrice']: shippingPrice, ['taxRate']: shippingTaxRate } =
-							await getShippingMethodData.call(this, delivery.shippingMethod, currencyData[0]);
-
+						const shippingMethodData = await getShippingMethodData.call(this, delivery.shippingMethod, params.currencyData[0]);
 						const deliveryTime = await getShippingDeliveryTime.call(this, delivery.shippingMethod);
-						const shippingTax = shippingPrice * (shippingTaxRate / 100);
-						const shippingTaxPrice = shippingPrice + shippingTax;
-
-						const shippingCosts = {
-							unitPrice: shippingPrice,
-							totalPrice: shippingPrice,
-							quantity: 1,
-							calculatedTaxes: [
-								{
-									tax: shippingTax,
-									taxRate: shippingTaxRate,
-									price: shippingTaxPrice,
-								},
-							],
-							taxRules: [
-								{
-									taxRate: shippingTaxRate,
-									percentage: 100,
-								},
-							],
-						};
-
-						const shippingDateEarliest = new Date();
-						const shippingDateLatest = new Date();
-						switch (deliveryTime.unit) {
-							case 'hour':
-								shippingDateEarliest.setHours(shippingDateEarliest.getHours() + deliveryTime.min);
-								shippingDateLatest.setHours(shippingDateLatest.getHours() + deliveryTime.max);
-								break;
-							case 'day':
-								shippingDateEarliest.setDate(shippingDateEarliest.getDate() + deliveryTime.min);
-								shippingDateLatest.setDate(shippingDateLatest.getDate() + deliveryTime.max);
-								break;
-							case 'week':
-								shippingDateEarliest.setDate(shippingDateEarliest.getDate() + deliveryTime.min * 7);
-								shippingDateLatest.setDate(shippingDateLatest.getDate() + deliveryTime.max * 7);
-								break;
-						}
-
-						return {
+						return buildDeliveryPayload({
 							shippingOrderAddressId,
 							shippingMethodId: delivery.shippingMethod,
 							stateId: delivery.state,
-							shippingDateEarliest,
-							shippingDateLatest,
-							shippingCosts,
-						};
+							shippingPrice: shippingMethodData.unitPrice,
+							shippingTaxRate: shippingMethodData.taxRate,
+							deliveryTime,
+						});
 					}),
 				);
 			}
 
+			// 6. Compute shipping costs
 			let shippingCosts: GenericPrice;
 			if (deliveries.length === 0) {
 				const defaultShippingMethod = await getDefaultShippingMethod.call(this);
-				const { ['unitPrice']: shippingPrice, ['taxRate']: shippingTaxRate } =
-					await getShippingMethodData.call(this, defaultShippingMethod, currencyData[0]);
-				const shippingTax = shippingPrice * (shippingTaxRate / 100);
-				const shippingTaxPrice = shippingPrice + shippingTax;
-				shippingCosts = {
-					unitPrice: shippingPrice,
-					totalPrice: shippingPrice,
-					quantity: 1,
-					calculatedTaxes: [
-						{
-							tax: shippingTax,
-							taxRate: shippingTaxRate,
-							price: shippingTaxPrice,
-						},
-					],
-					taxRules: [
-						{
-							taxRate: shippingTaxRate,
-							percentage: 100,
-						},
-					],
-				};
+				const shippingMethodData = await getShippingMethodData.call(this, defaultShippingMethod, params.currencyData[0]);
+				shippingCosts = buildGenericPrice(shippingMethodData.unitPrice, shippingMethodData.taxRate, 1);
 			} else {
-				const deliveriesUnitPrice = deliveries.reduce(
-					(acc, delivery) => acc + delivery.shippingCosts.unitPrice,
-					0,
-				);
-				const deliveriesTax = deliveries.reduce(
-					(acc, delivery) => acc + delivery.shippingCosts.calculatedTaxes[0].tax,
-					0,
-				);
-				const deliveriesTaxRate = deliveries[0].shippingCosts.taxRules[0].taxRate;
-				const deliveriesTaxPrice = deliveriesUnitPrice + deliveriesTax;
-
-				shippingCosts = {
-					unitPrice: deliveriesUnitPrice,
-					totalPrice: deliveriesUnitPrice,
-					quantity: 1,
-					calculatedTaxes: [
-						{
-							tax: deliveriesTax,
-							taxRate: deliveriesTaxRate,
-							price: deliveriesTaxPrice,
-						},
-					],
-					taxRules: [
-						{
-							taxRate: deliveriesTaxRate,
-							percentage: 100,
-						},
-					],
-				};
+				shippingCosts = aggregateDeliveryShippingCosts(deliveries);
 			}
 
-			const parsedItemRounding = JSON.parse(currencyData[3]);
-			const itemRounding: Rounding = {
-				decimals: parsedItemRounding.decimals,
-				interval: parsedItemRounding.interval,
-				roundForNet: parsedItemRounding.roundForNet,
-			};
-			const parsedTotalRounding = JSON.parse(currencyData[4]);
-			const totalRounding: Rounding = {
-				decimals: parsedTotalRounding.decimals,
-				interval: parsedTotalRounding.interval,
-				roundForNet: parsedTotalRounding.roundForNet,
-			};
-			const serializedBillingAddress = {
-				id: customerData.billingAddress.id,
-				countryId: customerData.billingAddress.countryId,
-				firstName: customerData.billingAddress.firstName,
-				lastName: customerData.billingAddress.lastName,
-				city: customerData.billingAddress.city,
-				street: customerData.billingAddress.street,
-			};
-
-			const createBody: OrderCreatePayload = {
-				id: orderId,
-				currencyId: currencyData[0],
-				languageId: globalDefaults.languageId,
-				salesChannelId: globalDefaults.salesChannelId,
-				billingAddressId: customerData.billingAddress.id,
-				orderNumber: this.getNodeParameter('orderNumber', i) as string,
-				orderDateTime: this.getNodeParameter('dateAndTime', i) as Date,
-				stateId: this.getNodeParameter('state', i) as string,
-				currencyFactor: parseInt(currencyData[2]),
-				itemRounding,
-				totalRounding,
+			// 7. Assemble final payload
+			const createBody = buildOrderCreatePayload({
+				orderId,
+				currencyData: params.currencyData,
+				globalDefaults,
+				customerData,
 				orderCustomer,
-				billingAddress: serializedBillingAddress,
 				lineItems,
 				price,
 				shippingCosts,
 				transactions,
 				deliveries,
 				addresses,
-			};
+				orderNumber: params.orderNumber,
+				dateAndTime: params.dateAndTime,
+				stateId: params.stateId,
+			});
+
+			cleanPayload(createBody);
+
+			// 8. Create and fetch back
+			await apiRequest.call(this, 'POST', `/order`, createBody);
 
 			const searchBody = {
 				fields: orderFields,
-				includes: {
-					order: orderFields,
-				},
+				includes: { order: orderFields },
 				filter: [{ type: 'equals', field: 'id', value: orderId }],
 			};
-
-			for (const key in createBody) {
-				const typedKey = key as keyof OrderCreatePayload;
-
-				if (
-					Array.isArray(createBody[typedKey]) &&
-					(createBody[typedKey] as Array<unknown>).length === 0
-				) {
-					delete createBody[typedKey];
-				} else if (createBody[typedKey] === '') {
-					delete createBody[typedKey];
-				}
-			}
-
-			await apiRequest.call(this, 'POST', `/order`, createBody);
-
 			const response = await apiRequest.call(this, 'POST', `/search/order`, searchBody);
 
 			const executionData = this.helpers.constructExecutionMetaData(wrapData(response.data), {

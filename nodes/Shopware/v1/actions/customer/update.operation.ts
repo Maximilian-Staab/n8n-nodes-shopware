@@ -11,10 +11,12 @@ import {
 	NodeApiError,
 	NodeOperationError,
 } from 'n8n-workflow';
-import type { CustomerUpdatePayload, NodeCustomerAddress } from './types';
+import type { NodeCustomerAddress } from './types';
 import { uuidv7, wrapData } from '../../helpers/utils';
 import { customerFields } from './fields';
 import { apiRequest } from '../../transport';
+import { extractCustomerUpdateParams } from '../../helpers/params';
+import { buildCustomerAddresses, buildCustomerUpdatePayload, cleanPayload } from '../../helpers/payloadBuilders';
 
 const properties: INodeProperties[] = [
 	{
@@ -221,10 +223,7 @@ export async function execute(
 				});
 			}
 
-			const updateFields = this.getNodeParameter('updateFields', i);
-
-			let defaultShippingAddressId: string | null = null;
-			let defaultBillingAddressId: string | null = null;
+			const { updateFields } = extractCustomerUpdateParams.call(this, i);
 
 			if (updateFields.email && (updateFields.email as string).indexOf('@') === -1) {
 				throw new NodeOperationError(this.getNode(), 'Invalid email address', {
@@ -233,73 +232,29 @@ export async function execute(
 				});
 			}
 
-			let addresses: CustomerUpdatePayload['addresses'];
+			let addresses: ReturnType<typeof buildCustomerAddresses> | undefined;
 			const nodeAddresses = (
 				updateFields.addresses as { address: Array<NodeCustomerAddress> | null }
 			)?.address;
 
 			if (nodeAddresses && nodeAddresses.length > 0) {
-				addresses = nodeAddresses.map((address) => {
-					const addressId = uuidv7();
-
-					if (address.defaultShippingAddress) {
-						if (defaultShippingAddressId) {
-							throw new NodeOperationError(this.getNode(), 'Duplicate default shipping address', {
-								description: 'Only one address can be a default shipping address',
-								itemIndex: i,
-							});
-						}
-						defaultShippingAddressId = addressId;
-					}
-
-					if (address.defaultBillingAddress) {
-						if (defaultBillingAddressId) {
-							throw new NodeOperationError(this.getNode(), 'Duplicate default billing address', {
-								description: 'Only one address can be a default billing address',
-								itemIndex: i,
-							});
-						}
-						defaultBillingAddressId = addressId;
-					}
-
-					return {
-						id: addressId,
-						countryId: address.country,
-						firstName: address.firstName,
-						lastName: address.lastName,
-						city: address.city,
-						street: address.street,
-						salutationId: customer.salutationId
-					};
-				});
+				addresses = buildCustomerAddresses(
+					nodeAddresses,
+					customer.salutationId,
+					uuidv7,
+					this.getNode(),
+					i,
+				);
 			}
 
-			const updateBody: CustomerUpdatePayload = {
-				firstName: updateFields.firstName as string,
-				lastName: updateFields.lastName as string,
-				email: updateFields.email as string,
-				customerNumber: updateFields.customerNumber as string,
-				defaultPaymentMethodId: updateFields.paymentMethod as string,
-				languageId: updateFields.language as string,
-				salesChannelId: updateFields.salesChannel as string,
-				groupId: updateFields.group as string,
-				defaultShippingAddressId,
-				defaultBillingAddressId,
-				addresses,
-			};
+			const updateBody = buildCustomerUpdatePayload(
+				updateFields,
+				addresses?.addresses,
+				addresses?.defaultShippingAddressId ?? null,
+				addresses?.defaultBillingAddressId ?? null,
+			);
 
-			for (const key in updateBody) {
-				const typedKey = key as keyof CustomerUpdatePayload;
-
-				if (
-					Array.isArray(updateBody[typedKey]) &&
-					(updateBody[typedKey] as Array<unknown>).length === 0
-				) {
-					delete updateBody[typedKey];
-				} else if (updateBody[typedKey] === '' || updateBody[typedKey] === null) {
-					delete updateBody[typedKey];
-				}
-			}
+			cleanPayload(updateBody, true);
 
 			await apiRequest.call(this, 'PATCH', `/customer/${id}`, updateBody);
 

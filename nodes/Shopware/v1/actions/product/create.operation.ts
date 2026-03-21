@@ -13,10 +13,11 @@ import {
 	updateDisplayOptions,
 	NodeOperationError,
 } from 'n8n-workflow';
-import type { NodePrice, ProductCreatePayload } from './types';
 import { apiRequest } from '../../transport';
 import { productFields } from './fields';
 import { wrapData, getDefaultCurrencyId } from '../../helpers/utils';
+import { extractProductCreateParams } from '../../helpers/params';
+import { buildProductCreatePayload, applyAutoNetPrices, cleanPayload } from '../../helpers/payloadBuilders';
 
 const properties: INodeProperties[] = [
 	{
@@ -267,62 +268,17 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
-			const createBody: ProductCreatePayload = {
-				parentId: !this.getNodeParameter('parent', i)
-					? (this.getNodeParameter('parentId', i) as string)
-					: '',
-				productNumber: this.getNodeParameter('productNumber', i) as string,
-				ean: this.getNodeParameter('ean', i) as string,
-				name: this.getNodeParameter('name', i) as string,
-				description: this.getNodeParameter('description', i) as string,
-				price: [
-					{
-						currencyId: defaultCurrencyId,
-						gross: this.getNodeParameter('defaultGrossPrice', i) as number,
-						net: this.getNodeParameter('defaultAutoCalculateNet', i)
-							? 0
-							: (this.getNodeParameter('defaultNetPrice', i) as number),
-						linked: true,
-					},
-					...((
-						this.getNodeParameter('prices', i) as {
-							price: Array<NodePrice> | null;
-						}
-					).price
-						? (
-								this.getNodeParameter('prices', i) as {
-									price: Array<NodePrice>;
-								}
-							).price.map((price) => ({
-								currencyId: price.currency,
-								gross: price.grossPrice,
-								net: price.autoCalculateNet ? 0 : price.netPrice,
-								linked: true,
-							}))
-						: []),
-				],
-				taxId: (JSON.parse(this.getNodeParameter('taxRate', i) as string) as string[])[0],
-				manufacturer: (this.getNodeParameter('manufacturer', i) as string)
-					? {
-							name: this.getNodeParameter('manufacturer', i) as string,
-						}
-					: undefined,
-				stock: this.getNodeParameter('stock', i) as number,
-				categories: (this.getNodeParameter('categories', i) as string[]).map((category) => {
-					const categoryData = JSON.parse(category) as string[];
-					return {
-						id: categoryData[0],
-						name: categoryData[1],
-					};
-				}),
-				visibilities: (this.getNodeParameter('salesChannels', i) as string[]).map(
-					(salesChannelId) => ({
-						salesChannelId,
-						visibility: 30,
-					}),
-				),
-				active: this.getNodeParameter('active', i) as boolean,
-			};
+			const params = extractProductCreateParams.call(this, i);
+
+			const createBody = buildProductCreatePayload({
+				...params,
+				defaultNetPrice: params.defaultAutoCalculateNet ? 0 : params.defaultNetPrice,
+				defaultCurrencyId,
+			});
+
+			const taxRate = parseFloat((JSON.parse(params.taxRateRaw) as string[])[2]);
+			applyAutoNetPrices(createBody.price, taxRate);
+			cleanPayload(createBody);
 
 			const searchBody = {
 				fields: productFields,
@@ -331,26 +287,6 @@ export async function execute(
 				},
 				filter: [{ type: 'equals', field: 'productNumber', value: createBody.productNumber }],
 			};
-
-			for (const key in createBody) {
-				const typedKey = key as keyof ProductCreatePayload;
-
-				if (
-					Array.isArray(createBody[typedKey]) &&
-					(createBody[typedKey] as Array<unknown>).length === 0
-				) {
-					delete createBody[typedKey];
-				} else if (createBody[typedKey] === '') {
-					delete createBody[typedKey];
-				}
-			}
-
-			const taxRate = parseFloat((JSON.parse(this.getNodeParameter('taxRate', i) as string) as string[])[2]);
-			createBody.price.forEach((price) => {
-				if (price.net === 0) {
-					price.net = parseFloat((price.gross / (1 + taxRate / 100)).toFixed(2));
-				}
-			});
 
 			await apiRequest.call(this, 'POST', `/product`, createBody);
 

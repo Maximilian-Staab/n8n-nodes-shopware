@@ -7,10 +7,11 @@ import {
 	updateDisplayOptions,
 	NodeOperationError,
 } from 'n8n-workflow';
-import type { NodeChildCategory, CategoryCreatePayload } from './types';
 import { apiRequest } from '../../transport';
 import { categoryFields } from './fields';
 import { wrapData, uuidv7 } from '../../helpers/utils';
+import { extractCategoryCreateParams } from '../../helpers/params';
+import { buildCategoryCreatePayload, cleanNullPayload } from '../../helpers/payloadBuilders';
 
 const properties: INodeProperties[] = [
 	{
@@ -160,58 +161,23 @@ export async function execute(
 	for (let i = 0; i < items.length; i++) {
 		try {
 			const id = uuidv7();
-			let parent: CategoryCreatePayload['parent'] | null = null;
-			let parentId: string | null = null;
-			let children: CategoryCreatePayload['children'] | null = null;
+			const params = extractCategoryCreateParams.call(this, i);
 
-			if (!this.getNodeParameter('parent', i)) {
-				if (this.getNodeParameter('createParent', i)) {
-					parent = {
-						name: this.getNodeParameter('parentCategoryName', i) as string,
-						description: this.getNodeParameter('parentCategoryDescription', i) as string,
-					};
-				} else {
-					parentId = (JSON.parse(this.getNodeParameter('parentId', i) as string) as string[])[0];
-				}
-			}
-
-			const nodeChildCategories = (
-				this.getNodeParameter('children', i) as {
-					category: Array<NodeChildCategory> | null;
-				}
-			)?.category;
-
-			if (nodeChildCategories && nodeChildCategories.length > 0) {
-				children = nodeChildCategories.map((category) => ({
-					name: category.categoryName,
-					description: category.categoryDescription,
-				}));
-			}
-
-			const createBody: CategoryCreatePayload = {
+			const createBody = cleanNullPayload(buildCategoryCreatePayload({
 				id,
-				name: this.getNodeParameter('categoryName', i) as string,
-				description: this.getNodeParameter('categoryDescription', i) as string,
-				parentId,
-				parent,
-				children,
-			};
+				categoryName: params.categoryName,
+				categoryDescription: params.categoryDescription,
+				parentId: params.parentId,
+				parentCategoryName: params.parentCategoryName,
+				parentCategoryDescription: params.parentCategoryDescription,
+				nodeChildCategories: params.nodeChildCategories,
+			}));
 
 			const searchBody = {
 				fields: categoryFields,
-				includes: {
-					category: categoryFields,
-				},
+				includes: { category: categoryFields },
 				filter: [{ type: 'equals', field: 'id', value: id }],
 			};
-
-			for (const key in createBody) {
-				const typedKey = key as keyof CategoryCreatePayload;
-
-				if (createBody[typedKey] === null) {
-					delete createBody[typedKey];
-				}
-			}
 
 			await apiRequest.call(this, 'POST', `/category`, createBody);
 
