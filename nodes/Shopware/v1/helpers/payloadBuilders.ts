@@ -17,7 +17,12 @@ import type { ProductCreatePayload, ProductUpdatePayload, NodePrice } from '../a
 import type { CustomerCreatePayload, CustomerUpdatePayload, NodeCustomerAddress } from '../actions/customer/types';
 import type { CategoryCreatePayload, CategoryUpdatePayload, NodeChildCategory } from '../actions/category/types';
 import type { DeliveryTimeResponse } from '../actions/types';
-import { calculateLineItemPrice, buildGenericPrice, calculateNetFromGross } from './pricing';
+import {
+	aggregateGenericPrices,
+	buildGenericPrice,
+	calculateLineItemPrice,
+	calculateNetFromGross,
+} from './pricing';
 
 export interface LineItemInput {
 	identifier: string;
@@ -147,11 +152,11 @@ export function buildOrderAddressPayload(input: OrderAddressInput): Address {
 export interface TransactionInput {
 	paymentMethodId: string;
 	stateId: string;
+	netPrice: number;
 	totalPrice: number;
-	taxPrice: number;
-	orderTax: number;
-	defaultTaxRate: number;
 	quantity: number;
+	calculatedTaxes: GenericPrice['calculatedTaxes'];
+	taxRules: GenericPrice['taxRules'];
 }
 
 /**
@@ -162,22 +167,11 @@ export interface TransactionInput {
  */
 export function buildTransactionPayload(input: TransactionInput): Transaction {
 	const amount: GenericPrice = {
-		unitPrice: input.totalPrice,
-		totalPrice: input.taxPrice,
+		unitPrice: input.netPrice,
+		totalPrice: input.totalPrice,
 		quantity: input.quantity,
-		calculatedTaxes: [
-			{
-				tax: input.orderTax,
-				taxRate: input.defaultTaxRate,
-				price: input.taxPrice,
-			},
-		],
-		taxRules: [
-			{
-				taxRate: input.defaultTaxRate,
-				percentage: 100,
-			},
-		],
+		calculatedTaxes: input.calculatedTaxes,
+		taxRules: input.taxRules,
 	};
 
 	return {
@@ -194,35 +188,7 @@ export function buildTransactionPayload(input: TransactionInput): Transaction {
  * @returns A GenericPrice representing the combined shipping costs
  */
 export function aggregateDeliveryShippingCosts(deliveries: Delivery[]): GenericPrice {
-	const deliveriesUnitPrice = deliveries.reduce(
-		(acc, delivery) => acc + delivery.shippingCosts.unitPrice,
-		0,
-	);
-	const deliveriesTax = deliveries.reduce(
-		(acc, delivery) => acc + delivery.shippingCosts.calculatedTaxes[0].tax,
-		0,
-	);
-	const deliveriesTaxRate = deliveries[0].shippingCosts.taxRules[0].taxRate;
-	const deliveriesTaxPrice = deliveriesUnitPrice + deliveriesTax;
-
-	return {
-		unitPrice: deliveriesUnitPrice,
-		totalPrice: deliveriesUnitPrice,
-		quantity: 1,
-		calculatedTaxes: [
-			{
-				tax: deliveriesTax,
-				taxRate: deliveriesTaxRate,
-				price: deliveriesTaxPrice,
-			},
-		],
-		taxRules: [
-			{
-				taxRate: deliveriesTaxRate,
-				percentage: 100,
-			},
-		],
-	};
+	return aggregateGenericPrices(deliveries.map((delivery) => delivery.shippingCosts));
 }
 
 /**
@@ -237,44 +203,19 @@ export function aggregateDeliveryShippingCostsWithExisting(
 	deliveries: Delivery[],
 	existingShippingData: GenericPrice,
 ): GenericPrice {
-	const deliveriesUnitPrice =
-		deliveries.reduce((acc, delivery) => acc + delivery.shippingCosts.unitPrice, 0) +
-		existingShippingData.unitPrice;
-	const deliveriesTax =
-		deliveries.reduce(
-			(acc, delivery) => acc + delivery.shippingCosts.calculatedTaxes[0].tax,
-			0,
-		) + existingShippingData.calculatedTaxes[0].tax;
-	const deliveriesTaxRate = deliveries[0].shippingCosts.taxRules[0].taxRate;
-	const deliveriesTaxPrice = deliveriesUnitPrice + deliveriesTax;
-
-	return {
-		unitPrice: deliveriesUnitPrice,
-		totalPrice: deliveriesUnitPrice,
-		quantity: 1,
-		calculatedTaxes: [
-			{
-				tax: deliveriesTax,
-				taxRate: deliveriesTaxRate,
-				price: deliveriesTaxPrice,
-			},
-		],
-		taxRules: [
-			{
-				taxRate: deliveriesTaxRate,
-				percentage: 100,
-			},
-		],
-	};
+	return aggregateGenericPrices([
+		...deliveries.map((delivery) => delivery.shippingCosts),
+		existingShippingData,
+	]);
 }
 
 // Order Price builder
 
 export interface OrderPriceInput {
+	netPrice: number;
 	totalPrice: number;
-	orderTax: number;
-	defaultTaxRate: number;
-	taxPrice: number;
+	calculatedTaxes: OrderCreatePayload['price']['calculatedTaxes'];
+	taxRules: OrderCreatePayload['price']['taxRules'];
 }
 
 /**
@@ -282,23 +223,12 @@ export interface OrderPriceInput {
  */
 export function buildOrderPrice(input: OrderPriceInput): OrderCreatePayload['price'] {
 	return {
-		netPrice: input.totalPrice,
-		totalPrice: input.taxPrice,
-		calculatedTaxes: [
-			{
-				tax: input.orderTax,
-				taxRate: input.defaultTaxRate,
-				price: input.taxPrice,
-			},
-		],
-		taxRules: [
-			{
-				taxRate: input.defaultTaxRate,
-				percentage: 100,
-			},
-		],
-		positionPrice: input.totalPrice,
-		rawTotal: input.totalPrice,
+		netPrice: input.netPrice,
+		totalPrice: input.totalPrice,
+		calculatedTaxes: input.calculatedTaxes,
+		taxRules: input.taxRules,
+		positionPrice: input.netPrice,
+		rawTotal: input.netPrice,
 		taxStatus: 'gross',
 	};
 }
@@ -357,7 +287,7 @@ export function buildOrderCreatePayload(input: OrderCreatePayloadInput): OrderCr
 		orderNumber: input.orderNumber,
 		orderDateTime: input.dateAndTime,
 		stateId: input.stateId,
-		currencyFactor: parseInt(input.currencyData[2]),
+		currencyFactor: parseFloat(input.currencyData[2]),
 		itemRounding,
 		totalRounding,
 		orderCustomer: input.orderCustomer,

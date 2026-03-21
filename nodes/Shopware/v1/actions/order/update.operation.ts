@@ -27,7 +27,6 @@ import {
 	uuidv7,
 	getLineItemData,
 	getShippingMethodData,
-	getDefaultTaxRate,
 	getShippingDeliveryTime,
 	getCustomerByNumber,
 	getPrePaymentOrderStates,
@@ -495,22 +494,24 @@ export async function execute(
 					}),
 				);
 
-				const defaultTaxRate = await getDefaultTaxRate.call(this);
-				const totalPrice =
-					calculateOrderTotals(lineItems) +
-					previousOrderData.amountNet;
-				const orderTax = totalPrice * (defaultTaxRate / 100);
-				const taxPrice = totalPrice + orderTax;
-				const quantity = lineItems.reduce((acc, item) => acc + item.quantity, 0);
-
-				price = buildOrderPrice({ totalPrice, orderTax, defaultTaxRate, taxPrice });
+				const orderTotals = calculateOrderTotals(lineItems);
+				price = buildOrderPrice({
+					netPrice: orderTotals.netPrice,
+					totalPrice: orderTotals.totalPrice,
+					calculatedTaxes: orderTotals.calculatedTaxes,
+					taxRules: orderTotals.taxRules,
+				});
 
 				if (params.nodeTransactions && params.nodeTransactions.length > 0) {
 					transactions = params.nodeTransactions.map((transaction) =>
 						buildTransactionPayload({
 							paymentMethodId: transaction.paymentMethod,
 							stateId: transaction.state,
-							totalPrice, taxPrice, orderTax, defaultTaxRate, quantity,
+							netPrice: orderTotals.netPrice,
+							totalPrice: orderTotals.totalPrice,
+							quantity: orderTotals.quantity,
+							calculatedTaxes: orderTotals.calculatedTaxes,
+							taxRules: orderTotals.taxRules,
 						}),
 					);
 				}

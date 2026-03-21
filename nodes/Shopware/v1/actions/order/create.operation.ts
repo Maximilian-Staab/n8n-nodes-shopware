@@ -30,7 +30,6 @@ import {
 	getCustomerByNumber,
 	getLineItemData,
 	getShippingMethodData,
-	getDefaultTaxRate,
 	getShippingDeliveryTime,
 	getDefaultShippingMethod,
 	getDefaultLanguageId,
@@ -45,7 +44,7 @@ import {
 	buildOrderCreatePayload,
 	cleanPayload,
 } from '../../helpers/payloadBuilders';
-import { buildGenericPrice } from '../../helpers/pricing';
+import { buildGenericPrice, calculateOrderTotals } from '../../helpers/pricing';
 import { extractOrderCreateParams } from '../../helpers/params';
 
 const properties: INodeProperties[] = [
@@ -606,13 +605,13 @@ export async function execute(
 			);
 
 			// 3. Calculate order-level pricing
-			const defaultTaxRate = await getDefaultTaxRate.call(this);
-			const totalPrice = lineItems.reduce((acc, item) => acc + item.price.totalPrice, 0);
-			const orderTax = totalPrice * (defaultTaxRate / 100);
-			const taxPrice = totalPrice + orderTax;
-			const quantity = lineItems.reduce((acc, item) => acc + item.quantity, 0);
-
-			const price = buildOrderPrice({ totalPrice, orderTax, defaultTaxRate, taxPrice });
+			const orderTotals = calculateOrderTotals(lineItems);
+			const price = buildOrderPrice({
+				netPrice: orderTotals.netPrice,
+				totalPrice: orderTotals.totalPrice,
+				calculatedTaxes: orderTotals.calculatedTaxes,
+				taxRules: orderTotals.taxRules,
+			});
 
 			// 4. Build transactions
 			let transactions: Transaction[] = [];
@@ -621,7 +620,11 @@ export async function execute(
 					buildTransactionPayload({
 						paymentMethodId: transaction.paymentMethod,
 						stateId: transaction.state,
-						totalPrice, taxPrice, orderTax, defaultTaxRate, quantity,
+						netPrice: orderTotals.netPrice,
+						totalPrice: orderTotals.totalPrice,
+						quantity: orderTotals.quantity,
+						calculatedTaxes: orderTotals.calculatedTaxes,
+						taxRules: orderTotals.taxRules,
 					}),
 				);
 			}
