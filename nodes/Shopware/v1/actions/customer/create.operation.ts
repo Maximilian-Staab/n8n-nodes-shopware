@@ -213,7 +213,7 @@ export async function execute(
 
 			const email = this.getNodeParameter('email', i) as string;
 
-			if (email.indexOf('@') === -1) {
+			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
 				throw new NodeOperationError(this.getNode(), 'Invalid email address', {
 					description: `The email address '${email}' in the 'email' field isn't valid`,
 					itemIndex: i,

@@ -64,7 +64,7 @@ export class ShopwareOAuth2Api implements ICredentialType {
 				grant_type: 'client_credentials',
 			},
 			headers: {
-				'Content-Type': 'application/x-www-form-urlencoded',
+				'Content-Type': 'application/json',
 			},
 		})) as { access_token: string };
 		return { accessToken: access_token };

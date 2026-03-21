@@ -98,7 +98,7 @@ const properties: INodeProperties[] = [
 				name: 'manufacturer',
 				type: 'options',
 				typeOptions: {
-					loadOptionsMethod: 'getManufacturers',
+					loadOptionsMethod: 'getProductManufacturers',
 				},
 				default: '',
 				description: 'Filter products by their manufacturer',
@@ -298,7 +298,7 @@ export async function execute(
 			let fields = productFields;
 
 			const filters = this.getNodeParameter('filters', i);
-			const shrinkedFields = filters.fields;
+			const { fields: shrinkedFields, ...apiFilters } = filters;
 
 			if (shrinkedFields) {
 				fields = (shrinkedFields as string).split(',').map((field) => field.trim());
@@ -315,7 +315,7 @@ export async function execute(
 					{ page, limit: pageSize },
 					fields,
 					'product',
-					filters,
+					apiFilters,
 				);
 
 				const response = await apiRequest.call(this, 'POST', `/search/product`, body);

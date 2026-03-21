@@ -3,7 +3,7 @@
   "version": "1.4.5",
   "description": "Shopware 6 n8n community node",
   "license": "MIT",
-  "homepage": "https://n8n.io",
+  "homepage": "https://github.com/solution25com/n8n-nodes-shopware",
   "keywords": [
     "n8n",
     "n8n-node",

@@ -34,6 +34,7 @@ async function fetchResource<T>(
 	const returnData: INodePropertyOptions[] = [];
 
 	const body = {
+		limit: 500,
 		fields,
 		includes: {
 			[resource]: fields,

@@ -341,7 +341,7 @@ const properties: INodeProperties[] = [
 						type: 'number',
 						typeOptions: {
 							maxValue: 999000000,
-							minValue: 0,
+							minValue: 1,
 						},
 						required: true,
 						default: 1,

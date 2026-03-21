@@ -26,7 +26,8 @@ export async function apiRequest(
 	option: IDataObject = {},
 ) {
 	const credentials = await this.getCredentials('shopwareOAuth2Api');
-	const url = credentials.url as string;
+	const rawUrl = credentials.url as string;
+	const baseUrl = rawUrl.endsWith('/') ? rawUrl.slice(0, -1) : rawUrl;
 
 	query = query || {};
 
@@ -35,7 +36,7 @@ export async function apiRequest(
 		method,
 		body,
 		qs: query,
-		url: `${url}/api${endpoint}`,
+		url: `${baseUrl}/api${endpoint}`,
 		json: true,
 	};
 
