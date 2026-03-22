@@ -12,10 +12,10 @@ export const orderFilterHandlers: { [key: string]: (value: GenericValue) => Sear
 		field: 'orderDateTime',
 		parameters: { gte: value },
 	}),
-	currency: (value) => ({ type: 'equals', field: 'currency.name', value }),
+	currency: (value) => ({ type: 'equals', field: 'currencyId', value }),
 	deliveryState: (value) => ({
 		type: 'equals',
-		field: 'deliveries.stateMachineState.technicalName',
+		field: 'deliveries.stateId',
 		value,
 	}),
 	ids: (value) => ({
@@ -37,10 +37,10 @@ export const orderFilterHandlers: { [key: string]: (value: GenericValue) => Sear
 	minTotal: (value) => ({ type: 'range', field: 'amountTotal', parameters: { gte: value } }),
 	orderNumber: (value) => ({ type: 'equals', field: 'orderNumber', value }),
 	salesChannel: (value) => ({ type: 'equals', field: 'salesChannelId', value }),
-	state: (value) => ({ type: 'equals', field: 'stateMachineState.technicalName', value }),
+	state: (value) => ({ type: 'equals', field: 'stateId', value }),
 	transactionState: (value) => ({
 		type: 'equals',
-		field: 'transactions.stateMachineState.technicalName',
+		field: 'transactions.stateId',
 		value,
 	}),
 };
