@@ -669,7 +669,7 @@ export async function execute(
 				continue;
 			}
 
-			if (error instanceof NodeOperationError) {
+			if (error instanceof NodeOperationError || error instanceof NodeApiError) {
 				throw error;
 			}
 

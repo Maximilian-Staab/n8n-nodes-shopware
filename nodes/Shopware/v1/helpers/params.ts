@@ -19,7 +19,7 @@ export interface OrderCreateParams {
 	guestBillingAddress: NodeCustomerAddressDetails | null;
 	guestShippingAddress: NodeCustomerAddressDetails | null;
 	salesChannel: string | null;
-	currencyData: string[];
+	currencyData: unknown[];
 	nodeLineItems: NodeLineItem[] | null;
 	nodeTransactions: NodeTransaction[] | null;
 	nodeDeliveries: NodeDelivery[] | null;
@@ -59,7 +59,7 @@ export function extractOrderCreateParams(
 		salesChannel = this.getNodeParameter('salesChannel', i) as string;
 	}
 
-	const currencyData = JSON.parse(this.getNodeParameter('currency', i) as string) as string[];
+	const currencyData = JSON.parse(this.getNodeParameter('currency', i) as string) as unknown[];
 
 	const nodeLineItems = (
 		this.getNodeParameter('lineItems', i) as { lineItem: Array<NodeLineItem> | null }

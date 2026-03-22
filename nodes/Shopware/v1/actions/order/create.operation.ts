@@ -537,11 +537,12 @@ export async function execute(
 	for (let i = 0; i < items.length; i++) {
 		try {
 			const orderId = uuidv7();
+
 			const params = extractOrderCreateParams.call(this, i);
 			const lineItemLookup = await getLineItemDataBatch.call(
 				this,
 				(params.nodeLineItems ?? []).map((lineItem) => lineItem.productNumber),
-				params.currencyData[0],
+				params.currencyData[0] as string,
 				i,
 			);
 
@@ -688,12 +689,12 @@ export async function execute(
 								street: address.street,
 							}));
 						}
-						const shippingMethodDataKey = `${delivery.shippingMethod}:${params.currencyData[0]}`;
+						const shippingMethodDataKey = `${delivery.shippingMethod}:${params.currencyData[0] as string}`;
 						if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
 							shippingMethodDataCache.set(
 								shippingMethodDataKey,
 								Promise.resolve(
-									getShippingMethodFullData.call(this, delivery.shippingMethod, params.currencyData[0]),
+									getShippingMethodFullData.call(this, delivery.shippingMethod, params.currencyData[0] as string),
 								),
 							);
 						}
@@ -714,12 +715,12 @@ export async function execute(
 			if (deliveries.length === 0) {
 				defaultShippingMethodPromise ??= getDefaultShippingMethod.call(this);
 				const defaultShippingMethod = await defaultShippingMethodPromise;
-				const shippingMethodDataKey = `${defaultShippingMethod}:${params.currencyData[0]}`;
+				const shippingMethodDataKey = `${defaultShippingMethod}:${params.currencyData[0] as string}`;
 				if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
 					shippingMethodDataCache.set(
 						shippingMethodDataKey,
 						Promise.resolve(
-							getShippingMethodFullData.call(this, defaultShippingMethod, params.currencyData[0]),
+							getShippingMethodFullData.call(this, defaultShippingMethod, params.currencyData[0] as string),
 						),
 					);
 				}
@@ -774,7 +775,7 @@ export async function execute(
 				continue;
 			}
 
-			if (error instanceof NodeOperationError) {
+			if (error instanceof NodeOperationError || error instanceof NodeApiError) {
 				throw error;
 			}
 

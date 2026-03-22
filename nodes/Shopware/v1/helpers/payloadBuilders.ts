@@ -237,7 +237,7 @@ export function buildOrderPrice(input: OrderPriceInput): OrderCreatePayload['pri
 
 export interface OrderCreatePayloadInput {
 	orderId: string;
-	currencyData: string[];
+	currencyData: unknown[];
 	globalDefaults: Partial<GlobalDefaults>;
 	customerData: Partial<CustomerData>;
 	orderCustomer: OrderCustomer;
@@ -256,17 +256,18 @@ export interface OrderCreatePayloadInput {
  * Assembles the full order create payload from pre-built components.
  */
 export function buildOrderCreatePayload(input: OrderCreatePayloadInput): OrderCreatePayload {
-	const parsedItemRounding = JSON.parse(input.currencyData[3]);
+	// currencyData[3] and [4] are already objects after the initial JSON.parse in extractOrderCreateParams
+	const rawItemRounding = input.currencyData[3] as unknown as Rounding;
 	const itemRounding: Rounding = {
-		decimals: parsedItemRounding.decimals,
-		interval: parsedItemRounding.interval,
-		roundForNet: parsedItemRounding.roundForNet,
+		decimals: rawItemRounding.decimals,
+		interval: rawItemRounding.interval,
+		roundForNet: rawItemRounding.roundForNet,
 	};
-	const parsedTotalRounding = JSON.parse(input.currencyData[4]);
+	const rawTotalRounding = input.currencyData[4] as unknown as Rounding;
 	const totalRounding: Rounding = {
-		decimals: parsedTotalRounding.decimals,
-		interval: parsedTotalRounding.interval,
-		roundForNet: parsedTotalRounding.roundForNet,
+		decimals: rawTotalRounding.decimals,
+		interval: rawTotalRounding.interval,
+		roundForNet: rawTotalRounding.roundForNet,
 	};
 
 	const serializedBillingAddress = buildOrderAddressPayload({
@@ -280,14 +281,14 @@ export function buildOrderCreatePayload(input: OrderCreatePayloadInput): OrderCr
 
 	return {
 		id: input.orderId,
-		currencyId: input.currencyData[0],
+		currencyId: input.currencyData[0] as string,
 		languageId: input.globalDefaults.languageId!,
 		salesChannelId: input.globalDefaults.salesChannelId!,
 		billingAddressId: input.customerData.billingAddress!.id,
 		orderNumber: input.orderNumber,
 		orderDateTime: input.dateAndTime,
 		stateId: input.stateId,
-		currencyFactor: parseFloat(input.currencyData[2]),
+		currencyFactor: Number(input.currencyData[2]),
 		itemRounding,
 		totalRounding,
 		orderCustomer: input.orderCustomer,
