@@ -20,6 +20,11 @@ export const productFields = [
 	'ean',
 	'createdAt',
 	'updatedAt',
+	'media',
+	'categories',
+	'manufacturer',
+	'cover',
+	'coverId',
 ];
 
 export const currencyFields = ['id', 'name', 'factor', 'isoCode'];

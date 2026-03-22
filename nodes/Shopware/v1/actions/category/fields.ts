@@ -13,5 +13,7 @@ export const categoryFields = [
     'name',
     'description',
     'keywords',
-    'createdAt'
+    'createdAt',
+    'children',
+    'media',
 ]

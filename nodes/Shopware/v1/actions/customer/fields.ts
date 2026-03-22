@@ -20,5 +20,8 @@ export const customerFields = [
 	'lastLogin',
 	'orderCount',
 	'orderTotalAmount',
+	'addresses',
+	'defaultBillingAddress',
+	'defaultShippingAddress',
 ];
 
