@@ -6,6 +6,7 @@ import type {
 	IHttpRequestMethods,
 	IHttpRequestOptions,
 } from 'n8n-workflow';
+import { normalizeShopwareUrl } from '../helpers/validation';
 
 /**
  * Generic request wrapper for Shopware API.
@@ -26,8 +27,7 @@ export async function apiRequest(
 	option: IDataObject = {},
 ) {
 	const credentials = await this.getCredentials('shopwareOAuth2Api');
-	const rawUrl = credentials.url as string;
-	const baseUrl = rawUrl.endsWith('/') ? rawUrl.slice(0, -1) : rawUrl;
+	const baseUrl = normalizeShopwareUrl(credentials.url as string);
 
 	query = query || {};
 

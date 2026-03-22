@@ -17,6 +17,7 @@ import { customerFields } from './fields';
 import { apiRequest } from '../../transport';
 import { extractCustomerUpdateParams } from '../../helpers/params';
 import { buildCustomerAddresses, buildCustomerUpdatePayload, cleanPayload } from '../../helpers/payloadBuilders';
+import { validateShopwareId } from '../../helpers/validation';
 
 const properties: INodeProperties[] = [
 	{
@@ -205,7 +206,12 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
-			const id = this.getNodeParameter('id', i) as string;
+			const id = validateShopwareId(
+				this.getNode(),
+				this.getNodeParameter('id', i) as string,
+				i,
+				'Customer ID',
+			);
 
 			const searchBody = {
 				fields: customerFields,
@@ -269,6 +275,10 @@ export async function execute(
 			if (this.continueOnFail()) {
 				returnData.push({ json: { error: error.message } });
 				continue;
+			}
+
+			if (error instanceof NodeOperationError) {
+				throw error;
 			}
 
 			throw new NodeApiError(this.getNode(), error as JsonObject);

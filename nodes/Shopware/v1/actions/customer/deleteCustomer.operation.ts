@@ -8,6 +8,7 @@ import {
 } from 'n8n-workflow';
 import { apiRequest } from '../../transport';
 import { wrapData } from '../../helpers/utils';
+import { validateShopwareId } from '../../helpers/validation';
 
 const properties: INodeProperties[] = [
 	{
@@ -39,7 +40,12 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
-			const id = this.getNodeParameter('id', i) as string;
+			const id = validateShopwareId(
+				this.getNode(),
+				this.getNodeParameter('id', i) as string,
+				i,
+				'Customer ID',
+			);
 
 			await apiRequest.call(this, 'DELETE', `/customer/${id}`);
 

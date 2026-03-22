@@ -16,6 +16,7 @@ import { categoryFields } from './fields';
 import { apiRequest } from '../../transport';
 import { extractCategoryUpdateParams } from '../../helpers/params';
 import { buildCategoryUpdatePayload, cleanPayload } from '../../helpers/payloadBuilders';
+import { validateShopwareId } from '../../helpers/validation';
 
 const properties: INodeProperties[] = [
 	{
@@ -90,7 +91,13 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
-			const { id, updateFields } = extractCategoryUpdateParams.call(this, i);
+			const { updateFields } = extractCategoryUpdateParams.call(this, i);
+			const id = validateShopwareId(
+				this.getNode(),
+				this.getNodeParameter('id', i) as string,
+				i,
+				'Category ID',
+			);
 
 			const searchBody = {
 				fields: categoryFields,
@@ -121,6 +128,10 @@ export async function execute(
 			if (this.continueOnFail()) {
 				returnData.push({ json: { error: error.message } });
 				continue;
+			}
+
+			if (error instanceof NodeOperationError) {
+				throw error;
 			}
 
 			throw new NodeApiError(this.getNode(), error as JsonObject);

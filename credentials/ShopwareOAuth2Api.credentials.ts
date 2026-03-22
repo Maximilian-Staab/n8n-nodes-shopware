@@ -6,6 +6,7 @@ import type {
 	IHttpRequestHelper,
 	INodeProperties,
 } from 'n8n-workflow';
+import { normalizeShopwareUrl } from '../nodes/Shopware/v1/helpers/validation';
 
 export class ShopwareOAuth2Api implements ICredentialType {
 	name = 'shopwareOAuth2Api';
@@ -54,10 +55,10 @@ export class ShopwareOAuth2Api implements ICredentialType {
 	];
 
 	async preAuthentication(this: IHttpRequestHelper, credentials: ICredentialDataDecryptedObject) {
-		const url = credentials.url as string;
+		const url = normalizeShopwareUrl(credentials.url as string);
 		const { access_token } = (await this.helpers.httpRequest({
 			method: 'POST',
-			url: `${url.endsWith('/') ? url.slice(0, -1) : url}/api/oauth/token`,
+			url: `${url}/api/oauth/token`,
 			body: {
 				client_id: credentials.clientId,
 				client_secret: credentials.clientSecret,

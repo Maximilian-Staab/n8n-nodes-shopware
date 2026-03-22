@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import {
 	NodeOperationError,
 	type IDataObject,
@@ -27,6 +28,26 @@ import {
 } from '../actions/types';
 import { categoryFilterHandlers, customerFilterHandlers, orderFilterHandlers, productFilterHandlers } from './handlers';
 
+function getFirstDataEntry<T>(
+	this: IExecuteFunctions,
+	response: unknown,
+	message: string,
+	description: string,
+	itemIndex?: number,
+): T {
+	const data = (response as { data?: T[] } | undefined)?.data;
+	const entry = data?.[0];
+
+	if (!entry) {
+		throw new NodeOperationError(this.getNode(), message, {
+			description,
+			itemIndex,
+		});
+	}
+
+	return entry;
+}
+
 export function wrapData(data: IDataObject | IDataObject[]): INodeExecutionData[] {
 	if (!Array.isArray(data)) {
 		return [{ json: data }];
@@ -47,10 +68,11 @@ export function uuidv7(): string {
 	const now = Date.now();
 	const timeHex = hex(now, 12);
 
-	const rand1 = hex(Math.floor(Math.random() * 0xffff), 4);
-	const rand2 = hex(Math.floor(Math.random() * 0xffff), 4);
-	const rand3 = hex(Math.floor(Math.random() * 0xffffff), 6);
-	const rand4 = hex(Math.floor(Math.random() * 0xffffff), 6);
+	const randBuf = randomBytes(10);
+	const rand1 = hex(randBuf.readUInt16BE(0), 4);
+	const rand2 = hex(randBuf.readUInt16BE(2), 4);
+	const rand3 = hex(randBuf.readUIntBE(4, 3), 6);
+	const rand4 = hex(randBuf.readUIntBE(7, 3), 6);
 
 	return timeHex.slice(0, 8) + timeHex.slice(8, 12) + '7' + rand1.slice(1) + rand2 + rand3 + rand4;
 }
@@ -75,7 +97,13 @@ export async function getDefaultCurrencyId(this: IExecuteFunctions): Promise<str
 		],
 	};
 	const response = await apiRequest.call(this, 'POST', `/search/currency`, body);
-	return response.data[0].id;
+	const currency = getFirstDataEntry.call(
+		this,
+		response,
+		'No default currency found',
+		'Could not find a Shopware currency with factor 1.',
+	) as { id: string };
+	return currency.id;
 }
 
 /**
@@ -92,13 +120,40 @@ export async function getDefaultLanguageId(this: IExecuteFunctions): Promise<str
 		filter: [
 			{
 				type: 'equals',
-				field: 'name',
-				value: 'English',
+				field: 'translationCode.systemDefault',
+				value: true,
 			},
 		],
 	};
-	const response = await apiRequest.call(this, 'POST', `/search/language`, body);
-	return response.data[0].id;
+
+	try {
+		const response = await apiRequest.call(this, 'POST', `/search/language`, body);
+		const defaultLanguage = (response as { data?: Array<{ id: string }> }).data?.[0];
+		if (defaultLanguage) {
+			return defaultLanguage.id;
+		}
+	} catch {}
+
+	const fallbackResponse = await apiRequest.call(this, 'POST', `/search/language`, {
+		fields: genericFields,
+		includes: {
+			language: genericFields,
+		},
+		limit: 1,
+		sort: [
+			{
+				field: 'createdAt',
+				order: 'ASC',
+			},
+		],
+	});
+	const language = getFirstDataEntry.call(
+		this,
+		fallbackResponse,
+		'No default language found',
+		'Could not determine a default Shopware language from the instance configuration.',
+	) as { id: string };
+	return language.id;
 }
 
 /**
@@ -121,7 +176,13 @@ export async function getDefaultSalutationId(this: IExecuteFunctions): Promise<s
 		],
 	};
 	const response = await apiRequest.call(this, 'POST', `/search/salutation`, body);
-	return response.data[0].id;
+	const salutation = getFirstDataEntry.call(
+		this,
+		response,
+		'No default salutation found',
+		'Could not find the Shopware salutation with key "not_specified".',
+	) as { id: string };
+	return salutation.id;
 }
 
 /**
@@ -141,8 +202,18 @@ export async function getDefaultTaxRate(this: IExecuteFunctions): Promise<number
 		],
 	};
 
-	const taxId = (await apiRequest.call(this, 'POST', `/search/system-config`, body)).data[0]
-		.configurationValue;
+	const configEntry = getFirstDataEntry.call(
+		this,
+		await apiRequest.call(this, 'POST', `/search/system-config`, body),
+		'No default tax configuration found',
+		'Could not find the Shopware system configuration entry for the default tax rate.',
+	) as { configurationValue?: string };
+	const taxId = configEntry.configurationValue;
+	if (!taxId) {
+		throw new NodeOperationError(this.getNode(), 'Default tax configuration is invalid', {
+			description: 'The Shopware default tax configuration does not contain a tax ID.',
+		});
+	}
 
 	const taxRate = await getTaxRate.call(this, taxId);
 
@@ -165,7 +236,14 @@ export async function getDefaultShippingMethod(this: IExecuteFunctions): Promise
 		],
 	};
 
-	return (await apiRequest.call(this, 'POST', `/search/shipping-method`, body)).data[0].id;
+	const shippingMethod = getFirstDataEntry.call(
+		this,
+		await apiRequest.call(this, 'POST', `/search/shipping-method`, body),
+		'No default shipping method found',
+		'Could not find the Shopware shipping method with technical name "shipping_standard".',
+	) as { id: string };
+
+	return shippingMethod.id;
 }
 
 /**
@@ -195,9 +273,21 @@ export async function getShippingMethodData(
 	const shippingMethod = (await apiRequest.call(this, 'POST', `/search/shipping-method`, body))
 		.data[0];
 
-	const unitPrice = (shippingMethod.prices[0].currencyPrice as Array<ShippingMethodPrice>).filter(
+	if (!shippingMethod) {
+		throw new NodeOperationError(this.getNode(), 'Shipping method not found', {
+			description: `Could not find the shipping method with ID ${shippingMethodId}.`,
+		});
+	}
+
+	const shippingPrice = (shippingMethod.prices?.[0]?.currencyPrice as Array<ShippingMethodPrice> | undefined)?.find(
 		(price) => price.currencyId === currencyId,
-	)[0].net;
+	);
+	if (!shippingPrice) {
+		throw new NodeOperationError(this.getNode(), 'Shipping method price missing', {
+			description: `Shipping method ${shippingMethodId} does not have a price for currency ${currencyId}.`,
+		});
+	}
+	const unitPrice = shippingPrice.net;
 
 	const taxId = shippingMethod.taxId as string;
 
@@ -235,7 +325,18 @@ export async function getProductTaxRate(
 		],
 	};
 
-	const taxId = (await apiRequest.call(this, 'POST', `/search/product`, productBody)).data[0].taxId;
+	const product = getFirstDataEntry.call(
+		this,
+		await apiRequest.call(this, 'POST', `/search/product`, productBody),
+		'Product not found',
+		`Could not find the product with ID ${productId}.`,
+	) as { taxId?: string };
+	const taxId = product.taxId;
+	if (!taxId) {
+		throw new NodeOperationError(this.getNode(), 'Product tax is missing', {
+			description: `Product ${productId} does not have a tax ID assigned.`,
+		});
+	}
 
 	const taxRate = await getTaxRate.call(this, taxId);
 
@@ -257,7 +358,13 @@ async function getTaxRate(this: IExecuteFunctions, taxId: string): Promise<numbe
 		],
 	};
 
-	const taxRate = (await apiRequest.call(this, 'POST', `/search/tax`, taxBody)).data[0].taxRate;
+	const tax = getFirstDataEntry.call(
+		this,
+		await apiRequest.call(this, 'POST', `/search/tax`, taxBody),
+		'Tax not found',
+		`Could not find the Shopware tax entry with ID ${taxId}.`,
+	) as { taxRate: number };
+	const taxRate = tax.taxRate;
 
 	return taxRate;
 }
@@ -323,7 +430,13 @@ async function getCustomerAddress(
 
 	const address = (
 		await apiRequest.call(this, 'POST', `/search/customer-address`, customerAddressBody)
-	).data[0] as CustomerAddressResponse;
+	).data[0] as CustomerAddressResponse | undefined;
+
+	if (!address) {
+		throw new NodeOperationError(this.getNode(), 'Customer address not found', {
+			description: `Could not find the customer address with ID ${addressId}.`,
+		});
+	}
 
 	return address;
 }
@@ -400,8 +513,18 @@ export async function getShippingDeliveryTime(
 			},
 		],
 	};
-	const { min, max, unit } = (await apiRequest.call(this, 'POST', `/search/shipping-method`, body))
-		.data[0].deliveryTime;
+	const shippingMethod = getFirstDataEntry.call(
+		this,
+		await apiRequest.call(this, 'POST', `/search/shipping-method`, body),
+		'Shipping method not found',
+		`Could not find the shipping method with ID ${shippingMethodId}.`,
+	) as { deliveryTime?: DeliveryTimeResponse };
+	if (!shippingMethod.deliveryTime) {
+		throw new NodeOperationError(this.getNode(), 'Shipping delivery time missing', {
+			description: `Shipping method ${shippingMethodId} does not define a delivery time.`,
+		});
+	}
+	const { min, max, unit } = shippingMethod.deliveryTime;
 
 	return { min, max, unit };
 }
@@ -420,8 +543,18 @@ export async function getPrePaymentOrderStates(this: IExecuteFunctions): Promise
 		},
 	};
 
-	const states = (await apiRequest.call(this, 'POST', `/search/state-machine`, body)).data[0]
-		.states as Array<{ id: string; technicalName: string }>;
+	const stateMachine = getFirstDataEntry.call(
+		this,
+		await apiRequest.call(this, 'POST', `/search/state-machine`, body),
+		'Order state machine not found',
+		'Could not find the Shopware order state machine with technical name "order.state".',
+	) as { states?: Array<{ id: string; technicalName: string }> };
+	const states = stateMachine.states;
+	if (!states) {
+		throw new NodeOperationError(this.getNode(), 'Order state machine is invalid', {
+			description: 'The Shopware order state machine does not include any states.',
+		});
+	}
 
 	const prePaymentStates = states
 		.filter((state) => ['open', 'in_progress'].includes(state.technicalName))

@@ -43,6 +43,7 @@ import {
 	cleanPayload,
 } from '../../helpers/payloadBuilders';
 import { calculateOrderTotals } from '../../helpers/pricing';
+import { validateShopwareId } from '../../helpers/validation';
 
 const properties: INodeProperties[] = [
 	{
@@ -434,16 +435,17 @@ export async function execute(
 	for (let i = 0; i < items.length; i++) {
 		try {
 			const params = extractOrderUpdateParams.call(this, i);
+			const orderId = validateShopwareId(this.getNode(), params.id, i, 'Order ID');
 
 			// 1. Fetch previous order
 			const searchPrevOrderBody = {
-				filter: [{ type: 'equals', field: 'id', value: params.id }],
+				filter: [{ type: 'equals', field: 'id', value: orderId }],
 				associations: { currency: {} },
 			};
 			const prevOrder = (await apiRequest.call(this, 'POST', `/search/order`, searchPrevOrderBody)).data[0] as OrderResponse;
 			if (!prevOrder) {
 				throw new NodeOperationError(this.getNode(), 'Order does not exist', {
-					description: 'There is no order with id ' + params.id,
+					description: 'There is no order with id ' + orderId,
 					itemIndex: i,
 				});
 			}
@@ -609,14 +611,6 @@ export async function execute(
 			cleanPayload(updateBody, true);
 
 			// 7. State transition and update
-			if (params.orderState) {
-				await apiRequest.call(
-					this,
-					'POST',
-					`/_action/order/${previousOrderData.id}/state/${params.orderState}`,
-				);
-			}
-
 			if (params.orderState === '') {
 				throw new NodeOperationError(this.getNode(), 'Invalid order state', {
 					description: 'Please specify a valid order state from the list',
@@ -624,14 +618,22 @@ export async function execute(
 				});
 			}
 
+			if (params.orderState) {
+				await apiRequest.call(
+					this,
+					'POST',
+					`/_action/order/${orderId}/state/${params.orderState}`,
+				);
+			}
+
 			if (Object.keys(params.updateFields).length !== 0) {
-				await apiRequest.call(this, 'PATCH', `/order/${params.id}`, updateBody);
+				await apiRequest.call(this, 'PATCH', `/order/${orderId}`, updateBody);
 			}
 
 			const searchBody = {
 				fields: orderFields,
 				includes: { order: orderFields },
-				filter: [{ type: 'equals', field: 'id', value: params.id }],
+				filter: [{ type: 'equals', field: 'id', value: orderId }],
 			};
 			const response = await apiRequest.call(this, 'POST', `/search/order`, searchBody);
 
