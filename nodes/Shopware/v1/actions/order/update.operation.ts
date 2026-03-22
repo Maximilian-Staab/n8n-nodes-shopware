@@ -25,11 +25,10 @@ import { orderFields } from './fields';
 import {
 	wrapData,
 	uuidv7,
-	getLineItemData,
-	getShippingMethodData,
-	getShippingDeliveryTime,
 	getCustomerByNumber,
 	getPrePaymentOrderStates,
+	getLineItemDataBatch,
+	getShippingMethodFullData,
 } from '../../helpers/utils';
 import { extractOrderUpdateParams } from '../../helpers/params';
 import {
@@ -431,6 +430,8 @@ export async function execute(
 	items: INodeExecutionData[],
 ): Promise<INodeExecutionData[]> {
 	const returnData: INodeExecutionData[] = [];
+	let prePaymentOrderStatesPromise: Promise<Array<string>> | undefined;
+	const shippingMethodDataCache = new Map<string, Promise<Awaited<ReturnType<typeof getShippingMethodFullData>>>>();
 
 	for (let i = 0; i < items.length; i++) {
 		try {
@@ -460,7 +461,8 @@ export async function execute(
 			// 2. Resolve address updates
 			const customerData: Partial<CustomerData> = {};
 			if (params.billingAddress) {
-				const prePaymentStates = await getPrePaymentOrderStates.call(this);
+				prePaymentOrderStatesPromise ??= getPrePaymentOrderStates.call(this);
+				const prePaymentStates = await prePaymentOrderStatesPromise;
 				if (prePaymentStates.includes(previousOrderData.stateId)) {
 					customerData.billingAddress = {
 						id: uuidv7(),
@@ -489,9 +491,21 @@ export async function execute(
 			let transactions: Transaction[] = [];
 
 			if (params.nodeLineItems) {
+				const lineItemLookup = await getLineItemDataBatch.call(
+					this,
+					params.nodeLineItems.map((lineItem) => lineItem.productNumber),
+					currencyData.id,
+					i,
+				);
 				lineItems = await Promise.all(
 					params.nodeLineItems.map(async (lineItem) => {
-						const itemData = await getLineItemData.call(this, lineItem.productNumber, currencyData.id, i);
+						const itemData = lineItemLookup.get(lineItem.productNumber);
+						if (!itemData) {
+							throw new NodeOperationError(this.getNode(), 'No product found', {
+								description: 'There is no product associated with product number ' + lineItem.productNumber,
+								itemIndex: i,
+							});
+						}
 						return buildLineItemPayload({ ...itemData, quantity: lineItem.quantity });
 					}),
 				);
@@ -544,6 +558,10 @@ export async function execute(
 			let shippingCosts: GenericPrice | null = null;
 
 			if (params.nodeDeliveries && params.nodeDeliveries.length > 0) {
+				const existingCustomer = addresses.length === 0
+					&& params.nodeDeliveries.some((delivery) => delivery.customerShippingAddress)
+					? await getCustomerByNumber.call(this, prevOrderCustomer.customerNumber, i)
+					: null;
 				deliveries = await Promise.all(
 					params.nodeDeliveries.map(async (delivery) => {
 						let shippingOrderAddressId: string;
@@ -551,9 +569,7 @@ export async function execute(
 							if (addresses.length > 0) {
 								shippingOrderAddressId = addresses[0].id;
 							} else {
-								shippingOrderAddressId = (
-									await getCustomerByNumber.call(this, prevOrderCustomer.customerNumber, i)
-								).defaultShippingAddressId;
+								shippingOrderAddressId = existingCustomer!.defaultShippingAddressId;
 							}
 						} else {
 							const address = delivery.addressUi.addressValues;
@@ -581,15 +597,21 @@ export async function execute(
 								street: address.street,
 							}));
 						}
-						const shippingMethodData = await getShippingMethodData.call(this, delivery.shippingMethod, currencyData.id);
-						const deliveryTime = await getShippingDeliveryTime.call(this, delivery.shippingMethod);
+						const shippingMethodDataKey = `${delivery.shippingMethod}:${currencyData.id}`;
+						if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
+							shippingMethodDataCache.set(
+								shippingMethodDataKey,
+								getShippingMethodFullData.call(this, delivery.shippingMethod, currencyData.id),
+							);
+						}
+						const shippingMethodData = await shippingMethodDataCache.get(shippingMethodDataKey)!;
 						return buildDeliveryPayload({
 							shippingOrderAddressId,
 							shippingMethodId: delivery.shippingMethod,
 							stateId: delivery.state,
 							shippingPrice: shippingMethodData.unitPrice,
 							shippingTaxRate: shippingMethodData.taxRate,
-							deliveryTime,
+							deliveryTime: shippingMethodData.deliveryTime,
 						});
 					}),
 				);

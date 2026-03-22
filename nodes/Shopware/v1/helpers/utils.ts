@@ -23,6 +23,7 @@ import {
 	PaginationData,
 	ProductResponse,
 	SearchBodyConstruct,
+	ShippingMethodFullDataResponse,
 	ShippingMethodDataResponse,
 	ShippingMethodPrice,
 } from '../actions/types';
@@ -258,6 +259,15 @@ export async function getShippingMethodData(
 	shippingMethodId: string,
 	currencyId: string,
 ): Promise<ShippingMethodDataResponse> {
+	const { unitPrice, taxRate } = await getShippingMethodFullData.call(this, shippingMethodId, currencyId);
+	return { unitPrice, taxRate };
+}
+
+export async function getShippingMethodFullData(
+	this: IExecuteFunctions,
+	shippingMethodId: string,
+	currencyId: string,
+): Promise<ShippingMethodFullDataResponse> {
 	const body = {
 		associations: {
 			prices: {},
@@ -288,6 +298,12 @@ export async function getShippingMethodData(
 		});
 	}
 	const unitPrice = shippingPrice.net;
+	const deliveryTime = shippingMethod.deliveryTime as DeliveryTimeResponse | undefined;
+	if (!deliveryTime) {
+		throw new NodeOperationError(this.getNode(), 'Shipping delivery time missing', {
+			description: `Shipping method ${shippingMethodId} does not define a delivery time.`,
+		});
+	}
 
 	const taxId = shippingMethod.taxId as string;
 
@@ -298,7 +314,7 @@ export async function getShippingMethodData(
 		taxRate = await getDefaultTaxRate.call(this);
 	}
 
-	return { unitPrice, taxRate };
+	return { unitPrice, taxRate, deliveryTime };
 }
 
 /**
@@ -498,6 +514,111 @@ export async function getLineItemData(
 		unitPrice: price.net,
 		taxRate,
 	};
+}
+
+async function getTaxRatesByIds(
+	this: IExecuteFunctions,
+	taxIds: string[],
+): Promise<Map<string, number>> {
+	if (taxIds.length === 0) {
+		return new Map();
+	}
+
+	const taxBody = {
+		fields: ['id', 'taxRate'],
+		includes: {
+			tax: ['id', 'taxRate'],
+		},
+		filter: [
+			{
+				type: 'equalsAny',
+				field: 'id',
+				value: taxIds,
+			},
+		],
+	};
+	const taxes = ((await apiRequest.call(this, 'POST', `/search/tax`, taxBody)).data ?? []) as Array<{
+		id: string;
+		taxRate: number;
+	}>;
+
+	return new Map(taxes.map((tax) => [tax.id, tax.taxRate]));
+}
+
+export async function getLineItemDataBatch(
+	this: IExecuteFunctions,
+	productNumbers: string[],
+	currencyId: string,
+	itemIndex: number,
+): Promise<Map<string, LineItemResponse>> {
+	const uniqueProductNumbers = Array.from(new Set(productNumbers));
+	if (uniqueProductNumbers.length === 0) {
+		return new Map();
+	}
+
+	const body = {
+		fields: lineItemFields,
+		includes: {
+			product: lineItemFields,
+		},
+		filter: [
+			{
+				type: 'equalsAny',
+				field: 'productNumber',
+				value: uniqueProductNumbers,
+			},
+		],
+	};
+	const products = ((await apiRequest.call(this, 'POST', `/search/product`, body)).data ?? []) as ProductResponse[];
+	const productMap = new Map(products.map((product) => [product.productNumber, product]));
+	const missingProductNumbers = uniqueProductNumbers.filter((productNumber) => !productMap.has(productNumber));
+
+	if (missingProductNumbers.length > 0) {
+		throw new NodeOperationError(this.getNode(), 'No product found', {
+			description:
+				'There is no product associated with product number ' + missingProductNumbers[0],
+			itemIndex,
+		});
+	}
+
+	const taxRatesById = await getTaxRatesByIds.call(
+		this,
+		Array.from(new Set(products.map((product) => product.taxId))),
+	);
+
+	return new Map(
+		uniqueProductNumbers.map((productNumber) => {
+			const product = productMap.get(productNumber)!;
+			const price = product.price.find((entry) => entry.currencyId === currencyId);
+
+			if (!price) {
+				throw new NodeOperationError(this.getNode(), 'Line item price missing', {
+					description: `Line item with product number ${productNumber} does not have a price for the selected order currency`,
+					itemIndex,
+				});
+			}
+
+			const taxRate = taxRatesById.get(product.taxId);
+			if (taxRate === undefined) {
+				throw new NodeOperationError(this.getNode(), 'Tax not found', {
+					description: `Could not find the Shopware tax entry with ID ${product.taxId}.`,
+					itemIndex,
+				});
+			}
+
+			return [
+				productNumber,
+				{
+					identifier: product.id,
+					productId: product.id,
+					label: product.name,
+					states: product.states,
+					unitPrice: price.net,
+					taxRate,
+				},
+			];
+		}),
+	);
 }
 
 export async function getShippingDeliveryTime(

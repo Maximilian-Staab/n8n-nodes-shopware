@@ -12,6 +12,7 @@ type ProductPrice = {
 
 export interface ProductResponse {
 	id: string;
+	productNumber: string;
 	name: string;
 	states: string[];
 	price: Array<ProductPrice>;
@@ -61,6 +62,10 @@ export type ShippingMethodPrice = {
 export type ShippingMethodDataResponse = {
 	unitPrice: number;
 	taxRate: number;
+};
+
+export type ShippingMethodFullDataResponse = ShippingMethodDataResponse & {
+	deliveryTime: DeliveryTimeResponse;
 };
 
 export type DeliveryTimeResponse = {

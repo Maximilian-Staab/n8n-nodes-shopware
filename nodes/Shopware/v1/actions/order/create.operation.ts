@@ -28,9 +28,8 @@ import {
 	wrapData,
 	uuidv7,
 	getCustomerByNumber,
-	getLineItemData,
-	getShippingMethodData,
-	getShippingDeliveryTime,
+	getLineItemDataBatch,
+	getShippingMethodFullData,
 	getDefaultShippingMethod,
 	getDefaultLanguageId,
 } from '../../helpers/utils';
@@ -528,11 +527,23 @@ export async function execute(
 	items: INodeExecutionData[],
 ): Promise<INodeExecutionData[]> {
 	const returnData: INodeExecutionData[] = [];
+	let defaultLanguageIdPromise: Promise<string> | undefined;
+	let defaultShippingMethodPromise: Promise<string> | undefined;
+	const shippingMethodDataCache = new Map<
+		string,
+		Promise<Awaited<ReturnType<typeof getShippingMethodFullData>>>
+	>();
 
 	for (let i = 0; i < items.length; i++) {
 		try {
 			const orderId = uuidv7();
 			const params = extractOrderCreateParams.call(this, i);
+			const lineItemLookup = await getLineItemDataBatch.call(
+				this,
+				(params.nodeLineItems ?? []).map((lineItem) => lineItem.productNumber),
+				params.currencyData[0],
+				i,
+			);
 
 			// 1. Resolve customer data and order customer
 			const customerData: Partial<CustomerData> = {};
@@ -558,7 +569,8 @@ export async function execute(
 					customerNumber: params.customerNumber,
 				};
 			} else {
-				globalDefaults.languageId = await getDefaultLanguageId.call(this);
+				defaultLanguageIdPromise ??= getDefaultLanguageId.call(this);
+				globalDefaults.languageId = await defaultLanguageIdPromise;
 				globalDefaults.salesChannelId = params.salesChannel!;
 				customerData.firstName = params.guest!.firstName;
 				customerData.lastName = params.guest!.lastName;
@@ -599,7 +611,13 @@ export async function execute(
 
 			const lineItems = await Promise.all(
 				params.nodeLineItems.map(async (lineItem) => {
-					const itemData = await getLineItemData.call(this, lineItem.productNumber, params.currencyData[0], i);
+					const itemData = lineItemLookup.get(lineItem.productNumber);
+					if (!itemData) {
+						throw new NodeOperationError(this.getNode(), 'No product found', {
+							description: 'There is no product associated with product number ' + lineItem.productNumber,
+							itemIndex: i,
+						});
+					}
 					return buildLineItemPayload({ ...itemData, quantity: lineItem.quantity });
 				}),
 			);
@@ -675,15 +693,23 @@ export async function execute(
 								street: address.street,
 							}));
 						}
-						const shippingMethodData = await getShippingMethodData.call(this, delivery.shippingMethod, params.currencyData[0]);
-						const deliveryTime = await getShippingDeliveryTime.call(this, delivery.shippingMethod);
+						const shippingMethodDataKey = `${delivery.shippingMethod}:${params.currencyData[0]}`;
+						if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
+							shippingMethodDataCache.set(
+								shippingMethodDataKey,
+								Promise.resolve(
+									getShippingMethodFullData.call(this, delivery.shippingMethod, params.currencyData[0]),
+								),
+							);
+						}
+						const shippingMethodData = await shippingMethodDataCache.get(shippingMethodDataKey)!;
 						return buildDeliveryPayload({
 							shippingOrderAddressId,
 							shippingMethodId: delivery.shippingMethod,
 							stateId: delivery.state,
 							shippingPrice: shippingMethodData.unitPrice,
 							shippingTaxRate: shippingMethodData.taxRate,
-							deliveryTime,
+							deliveryTime: shippingMethodData.deliveryTime,
 						});
 					}),
 				);
@@ -692,8 +718,18 @@ export async function execute(
 			// 6. Compute shipping costs
 			let shippingCosts: GenericPrice;
 			if (deliveries.length === 0) {
-				const defaultShippingMethod = await getDefaultShippingMethod.call(this);
-				const shippingMethodData = await getShippingMethodData.call(this, defaultShippingMethod, params.currencyData[0]);
+				defaultShippingMethodPromise ??= getDefaultShippingMethod.call(this);
+				const defaultShippingMethod = await defaultShippingMethodPromise;
+				const shippingMethodDataKey = `${defaultShippingMethod}:${params.currencyData[0]}`;
+				if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
+					shippingMethodDataCache.set(
+						shippingMethodDataKey,
+						Promise.resolve(
+							getShippingMethodFullData.call(this, defaultShippingMethod, params.currencyData[0]),
+						),
+					);
+				}
+				const shippingMethodData = await shippingMethodDataCache.get(shippingMethodDataKey)!;
 				shippingCosts = buildGenericPrice(shippingMethodData.unitPrice, shippingMethodData.taxRate, 1);
 			} else {
 				shippingCosts = aggregateDeliveryShippingCosts(deliveries);
