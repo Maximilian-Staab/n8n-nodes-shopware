@@ -18,11 +18,11 @@ import { normalizeShopwareUrl } from '../helpers/validation';
  * @returns A promise that resolves to a parsed JSON response from Shopware
  * @throws NodeApiError when the request fails
  */
-export async function apiRequest(
+export async function apiRequest<T extends object = IDataObject>(
 	this: IExecuteFunctions | ILoadOptionsFunctions | IPollFunctions,
 	method: IHttpRequestMethods,
 	endpoint: string,
-	body: IDataObject = {},
+	body: T = {} as T,
 	query?: IDataObject,
 	option: IDataObject = {},
 ) {
@@ -34,7 +34,7 @@ export async function apiRequest(
 	const options: IHttpRequestOptions = {
 		headers: {},
 		method,
-		body,
+		body: body as unknown as IDataObject,
 		qs: query,
 		url: `${baseUrl}/api${endpoint}`,
 		json: true,

@@ -1,6 +1,4 @@
-import type { IDataObject } from 'n8n-workflow';
-
-export interface ProductCreatePayload extends IDataObject {
+export interface ProductCreatePayload {
 	id?: string;
 	parentId?: string;
 	manufacturer?: { name: string };
@@ -38,11 +36,6 @@ export interface ProductCreatePayload extends IDataObject {
 
 export type ProductUpdatePayload = Partial<ProductCreatePayload>;
 
-export type ProductOption = {
-	id: string;
-	name: string;
-};
-
 export type CurrencyOption = {
 	id: string;
 	name: string;
@@ -52,16 +45,6 @@ export type TaxOption = {
 	id: string;
 	name: string;
 	taxRate: number;
-};
-
-export type CategoryOption = {
-	id: string;
-	name: string;
-};
-
-export type SalesChannelOption = {
-	id: string;
-	name: string;
 };
 
 export type NodePrice = {

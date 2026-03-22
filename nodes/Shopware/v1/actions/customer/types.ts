@@ -1,6 +1,4 @@
-import type { IDataObject } from 'n8n-workflow';
-
-export interface CustomerCreatePayload extends IDataObject {
+export interface CustomerCreatePayload {
 	id?: string;
 	customerNumber: string;
 	firstName: string;
@@ -12,6 +10,7 @@ export interface CustomerCreatePayload extends IDataObject {
 	birthday?: string;
 	createdAt?: string;
 	updatedAt?: string;
+	salutationId?: string;
 	groupId: string;
 	salesChannelId: string;
 	languageId: string;
@@ -34,20 +33,6 @@ export interface CustomerCreatePayload extends IDataObject {
 
 export type CustomerUpdatePayload = Partial<CustomerCreatePayload>;
 
-export type LanguageOption = {
-	id: string;
-	name: string;
-};
-
-export type CustomerGroupOption = {
-	id: string;
-	name: string;
-};
-
-export type CountryOption = {
-	id: string;
-	name: string;
-};
 
 export type NodeCustomerAddress = {
 	country: string;

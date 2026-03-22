@@ -1,4 +1,3 @@
-import type { IDataObject } from 'n8n-workflow';
 
 export interface Rounding {
 	decimals: number;
@@ -95,6 +94,7 @@ export interface LineItem {
 }
 
 interface OrderBody {
+	id?: string;
 	orderNumber: string;
 	billingAddressId: string;
 	currencyId: string;
@@ -115,7 +115,7 @@ interface OrderBody {
 	lineItems: LineItem[];
 }
 
-export interface OrderCreatePayload extends OrderBody, IDataObject {}
+export type OrderCreatePayload = OrderBody;
 
 type NullablePartial<T> = {
   [P in keyof T]?: T[P] | null;

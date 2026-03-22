@@ -1,26 +1,8 @@
 import type { ILoadOptionsFunctions, INodePropertyOptions } from 'n8n-workflow';
-import type {
-	ProductOption,
-	CurrencyOption,
-	TaxOption,
-	CategoryOption,
-	SalesChannelOption,
-} from '../actions/product/types';
-import type { LanguageOption, CustomerGroupOption, CountryOption } from '../actions/customer/types';
+import type { CurrencyOption, TaxOption } from '../actions/product/types';
 import type { SalutationOption } from '../actions/order/types';
 import type { GenericOption } from '../actions/types';
-import {
-	productOptionFields,
-	currencyOptionFields,
-	taxOptionFields,
-	categoryOptionFields,
-	salesChannelOptionFields,
-} from '../actions/product/fields';
-import {
-	languageOptionFields,
-	customerGroupOptionFields,
-	countryOptionFields,
-} from '../actions/customer/fields';
+import { currencyOptionFields, taxOptionFields } from '../actions/product/fields';
 import { salutationOptionFields } from '../actions/order/fields';
 import { genericFields } from '../actions/fields';
 import { apiRequest } from '../transport';
@@ -62,7 +44,7 @@ async function fetchResource<T>(
 }
 
 export async function getProducts(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-	return await fetchResource<ProductOption>(this, 'product', productOptionFields);
+	return await fetchResource<GenericOption>(this, 'product', genericFields);
 }
 
 export async function getCurrencies(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
@@ -84,27 +66,23 @@ export async function getTaxes(this: ILoadOptionsFunctions): Promise<INodeProper
 }
 
 export async function getCategories(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-	return await fetchResource<CategoryOption>(this, 'category', categoryOptionFields, true);
+	return await fetchResource<GenericOption>(this, 'category', genericFields, true);
 }
 
 export async function getSalesChannels(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-	return await fetchResource<SalesChannelOption>(this, 'sales-channel', salesChannelOptionFields);
+	return await fetchResource<GenericOption>(this, 'sales-channel', genericFields);
 }
 
 export async function getLanguages(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-	return await fetchResource<LanguageOption>(this, 'language', languageOptionFields);
+	return await fetchResource<GenericOption>(this, 'language', genericFields);
 }
 
 export async function getCustomerGroups(
 	this: ILoadOptionsFunctions,
 ): Promise<INodePropertyOptions[]> {
-	return await fetchResource<CustomerGroupOption>(
-		this,
-		'customer-group',
-		customerGroupOptionFields,
-	);
+	return await fetchResource<GenericOption>(this, 'customer-group', genericFields);
 }
 
 export async function getPaymentMethods(
@@ -164,7 +142,7 @@ async function getStatesByType(
 }
 
 export async function getCountries(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-	return await fetchResource<CountryOption>(this, 'country', countryOptionFields);
+	return await fetchResource<GenericOption>(this, 'country', genericFields);
 }
 
 export async function getSalutations(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {

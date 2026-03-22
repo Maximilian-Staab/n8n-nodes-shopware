@@ -1,4 +1,4 @@
-import type { IDataObject, INode } from 'n8n-workflow';
+import type { INode } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 import type {
 	Address,
@@ -672,22 +672,23 @@ export function buildCategoryUpdatePayload(
  * Mutates and returns the object. Matches the original inline cleanup logic
  * used across all create/update operations.
  */
-export function cleanPayload<T extends IDataObject>(
+export function cleanPayload<T extends object>(
 	payload: T,
 	removeNull: boolean = false,
 ): T {
-	for (const key in payload) {
-		const value = payload[key];
+	const record = payload as Record<string, unknown>;
+	for (const key in record) {
+		const value = record[key];
 
 		if (
 			Array.isArray(value) &&
 			(value as Array<unknown>).length === 0
 		) {
-			delete payload[key];
+			delete record[key];
 		} else if (value === '') {
-			delete payload[key];
+			delete record[key];
 		} else if (removeNull && value === null) {
-			delete payload[key];
+			delete record[key];
 		}
 	}
 	return payload;
@@ -696,10 +697,11 @@ export function cleanPayload<T extends IDataObject>(
 /**
  * Removes null-only values from a payload object (used by category create).
  */
-export function cleanNullPayload<T extends IDataObject>(payload: T): T {
-	for (const key in payload) {
-		if (payload[key] === null) {
-			delete payload[key];
+export function cleanNullPayload<T extends object>(payload: T): T {
+	const record = payload as Record<string, unknown>;
+	for (const key in record) {
+		if (record[key] === null) {
+			delete record[key];
 		}
 	}
 	return payload;

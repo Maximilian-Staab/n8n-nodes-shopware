@@ -1,6 +1,6 @@
-import type { IDataObject } from 'n8n-workflow';
-
-export interface CategoryCreatePayload extends IDataObject {
+export interface CategoryCreatePayload {
+	id?: string;
+	active?: boolean;
 	name: string;
 	description: string;
 	parentId?: string | null;

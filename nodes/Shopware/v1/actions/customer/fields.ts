@@ -22,8 +22,3 @@ export const customerFields = [
 	'orderTotalAmount',
 ];
 
-export const languageOptionFields = ['id', 'name'];
-
-export const customerGroupOptionFields = ['id', 'name'];
-
-export const countryOptionFields = ['id', 'name'];
