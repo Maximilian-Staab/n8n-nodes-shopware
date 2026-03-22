@@ -271,6 +271,7 @@ export async function getShippingMethodFullData(
 	const body = {
 		associations: {
 			prices: {},
+			deliveryTime: {},
 		},
 		filter: [
 			{
