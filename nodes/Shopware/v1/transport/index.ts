@@ -5,8 +5,36 @@ import type {
 	ILoadOptionsFunctions,
 	IHttpRequestMethods,
 	IHttpRequestOptions,
+	JsonObject,
 } from 'n8n-workflow';
+import { NodeApiError } from 'n8n-workflow';
 import { normalizeShopwareUrl } from '../helpers/validation';
+
+interface ShopwareApiError {
+	status: string;
+	code: string;
+	title: string;
+	detail: string;
+	meta?: { parameters: Record<string, string> };
+}
+
+/**
+ * Extracts a user-friendly message and description from a Shopware API error response.
+ */
+function parseShopwareError(error: unknown): { message: string; description: string } | null {
+	const err = error as { context?: { data?: { errors?: ShopwareApiError[] } } };
+	const errors = err?.context?.data?.errors;
+
+	if (!errors || errors.length === 0) {
+		return null;
+	}
+
+	const first = errors[0];
+	return {
+		message: `Shopware API error: ${first.title} (${first.code})`,
+		description: first.detail,
+	};
+}
 
 /**
  * Generic request wrapper for Shopware API.
@@ -48,5 +76,13 @@ export async function apiRequest<T extends object = IDataObject>(
 		delete options.body;
 	}
 
-	return await this.helpers.httpRequestWithAuthentication.call(this, 'shopwareOAuth2Api', options);
+	try {
+		return await this.helpers.httpRequestWithAuthentication.call(this, 'shopwareOAuth2Api', options);
+	} catch (error) {
+		const shopwareError = parseShopwareError(error);
+		if (shopwareError) {
+			throw new NodeApiError(this.getNode(), error as JsonObject, shopwareError);
+		}
+		throw error;
+	}
 }
