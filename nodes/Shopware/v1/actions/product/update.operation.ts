@@ -312,7 +312,7 @@ export async function execute(
 			)?.mediaItem;
 
 			if (nodeMedia && nodeMedia.length > 0) {
-				const { media, coverId } = await uploadProductMedia.call(this, nodeMedia, id);
+				const { media, coverId } = await uploadProductMedia.call(this, nodeMedia);
 				updateBody.media = media;
 				if (coverId) {
 					updateBody.coverId = coverId;

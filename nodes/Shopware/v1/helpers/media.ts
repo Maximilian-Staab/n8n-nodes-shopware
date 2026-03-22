@@ -13,21 +13,18 @@ interface UploadedMedia {
 }
 
 /**
- * Extracts file name and extension from a URL.
+ * Extracts the file extension from a URL.
  */
-function parseMediaUrl(url: string): { fileName: string; extension: string } {
+function parseExtension(url: string): string {
 	const pathname = new URL(url).pathname;
-	const lastSegment = pathname.split('/').pop() || 'image.jpg';
+	const lastSegment = pathname.split('/').pop() || '';
 	const dotIndex = lastSegment.lastIndexOf('.');
 
 	if (dotIndex === -1) {
-		return { fileName: lastSegment, extension: 'jpg' };
+		return 'jpg';
 	}
 
-	return {
-		fileName: lastSegment.substring(0, dotIndex),
-		extension: lastSegment.substring(dotIndex + 1).toLowerCase(),
-	};
+	return lastSegment.substring(dotIndex + 1).toLowerCase();
 }
 
 /**
@@ -35,17 +32,15 @@ function parseMediaUrl(url: string): { fileName: string; extension: string } {
  *
  * Shopware media upload flow:
  * 1. Create a media entity: POST /api/media with { id }
- * 2. Upload the file: POST /api/_action/media/{mediaId}/upload?extension=ext&fileName=name
+ * 2. Upload the file: POST /api/_action/media/{mediaId}/upload?extension=ext
  * 3. Return product_media association entries with { id: productMediaId, mediaId, position }
  *
  * @param nodeMedia - Array of media items with URL, position, and cover flag
- * @param productId - Optional existing product ID (for update operations, used to deduplicate file names)
  * @returns Object with media associations array and optional coverId
  */
 export async function uploadProductMedia(
 	this: IExecuteFunctions,
 	nodeMedia: NodeProductMedia[],
-	productId?: string,
 ): Promise<UploadedMedia> {
 	const media: UploadedMedia['media'] = [];
 	let coverId: string | null = null;
@@ -53,11 +48,7 @@ export async function uploadProductMedia(
 	for (const item of nodeMedia) {
 		const mediaId = uuidv7();
 		const productMediaId = uuidv7();
-		const { fileName, extension } = parseMediaUrl(item.url);
-
-		const uniqueFileName = productId
-			? `${fileName}-${productId.substring(0, 8)}-${mediaId.substring(0, 8)}`
-			: `${fileName}-${mediaId.substring(0, 8)}`;
+		const extension = parseExtension(item.url);
 
 		await apiRequest.call(this, 'POST', `/media`, { id: mediaId });
 
@@ -66,7 +57,7 @@ export async function uploadProductMedia(
 			'POST',
 			`/_action/media/${mediaId}/upload`,
 			{ url: item.url } as Record<string, string>,
-			{ extension, fileName: uniqueFileName },
+			{ extension },
 		);
 
 		media.push({
