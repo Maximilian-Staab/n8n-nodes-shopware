@@ -316,6 +316,9 @@ export async function execute(
 					fields,
 					'customer',
 					filters,
+					'addresses',
+					'defaultBillingAddress',
+					'defaultShippingAddress',
 				);
 
 				const response = await apiRequest.call(this, 'POST', `/search/customer`, body);

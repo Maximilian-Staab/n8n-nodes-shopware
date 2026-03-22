@@ -159,6 +159,8 @@ export async function execute(
 					fields,
 					'category',
 					filters,
+					'children',
+					'media',
 				);
 
 				const response = await apiRequest.call(this, 'POST', `/search/category`, body);

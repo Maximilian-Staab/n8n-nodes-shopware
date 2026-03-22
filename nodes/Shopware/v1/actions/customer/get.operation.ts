@@ -74,6 +74,11 @@ export async function execute(
 					customer: fields,
 				},
 				filter: [{ type: 'equals', field: 'id', value: id }],
+				associations: {
+					addresses: {},
+					defaultBillingAddress: {},
+					defaultShippingAddress: {},
+				},
 			};
 
 			const response = await apiRequest.call(this, 'POST', `/search/customer`, body);

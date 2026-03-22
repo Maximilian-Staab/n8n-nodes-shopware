@@ -316,6 +316,10 @@ export async function execute(
 					fields,
 					'product',
 					apiFilters,
+					'media',
+					'categories',
+					'manufacturer',
+					'cover',
 				);
 
 				const response = await apiRequest.call(this, 'POST', `/search/product`, body);

@@ -74,6 +74,12 @@ export async function execute(
 					product: fields,
 				},
 				filter: [{ type: 'equals', field: 'id', value: id }],
+				associations: {
+					media: {},
+					categories: {},
+					manufacturer: {},
+					cover: {},
+				},
 			};
 
 			const response = await apiRequest.call(this, 'POST', `/search/product`, body);

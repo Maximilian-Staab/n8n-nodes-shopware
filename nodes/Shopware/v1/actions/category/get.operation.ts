@@ -74,6 +74,10 @@ export async function execute(
 					category: fields,
 				},
 				filter: [{ type: 'equals', field: 'id', value: id }],
+				associations: {
+					children: {},
+					media: {},
+				},
 			};
 
 			const response = await apiRequest.call(this, 'POST', `/search/category`, body);
