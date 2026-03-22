@@ -219,6 +219,11 @@ export async function execute(
 					customer: customerFields,
 				},
 				filter: [{ type: 'equals', field: 'id', value: id }],
+				associations: {
+					addresses: {},
+					defaultBillingAddress: {},
+					defaultShippingAddress: {},
+				},
 			};
 
 			const customer = (await apiRequest.call(this, 'POST', `/search/customer`, searchBody)).data[0];

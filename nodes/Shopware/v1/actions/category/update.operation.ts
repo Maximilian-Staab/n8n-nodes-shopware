@@ -103,6 +103,10 @@ export async function execute(
 				fields: categoryFields,
 				includes: { category: categoryFields },
 				filter: [{ type: 'equals', field: 'id', value: id }],
+				associations: {
+					children: {},
+					media: {},
+				},
 			};
 
 			const category = (await apiRequest.call(this, 'POST', `/search/category`, searchBody)).data[0];

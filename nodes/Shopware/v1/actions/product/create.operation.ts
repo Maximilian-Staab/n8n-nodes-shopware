@@ -286,6 +286,12 @@ export async function execute(
 					product: productFields,
 				},
 				filter: [{ type: 'equals', field: 'productNumber', value: createBody.productNumber }],
+				associations: {
+					media: {},
+					categories: {},
+					manufacturer: {},
+					cover: {},
+				},
 			};
 
 			await apiRequest.call(this, 'POST', `/product`, createBody);

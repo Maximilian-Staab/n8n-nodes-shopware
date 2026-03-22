@@ -268,6 +268,11 @@ export async function execute(
 					customer: customerFields,
 				},
 				filter: [{ type: 'equals', field: 'customerNumber', value: createBody.customerNumber }],
+				associations: {
+					addresses: {},
+					defaultBillingAddress: {},
+					defaultShippingAddress: {},
+				},
 			};
 
 			await apiRequest.call(this, 'POST', `/customer`, createBody);

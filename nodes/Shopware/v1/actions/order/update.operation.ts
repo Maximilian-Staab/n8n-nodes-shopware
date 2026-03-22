@@ -656,6 +656,12 @@ export async function execute(
 				fields: orderFields,
 				includes: { order: orderFields },
 				filter: [{ type: 'equals', field: 'id', value: orderId }],
+				associations: {
+					currency: {},
+					deliveries: {},
+					transactions: {},
+					lineItems: {},
+				},
 			};
 			const response = await apiRequest.call(this, 'POST', `/search/order`, searchBody);
 

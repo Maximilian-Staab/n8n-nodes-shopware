@@ -177,6 +177,10 @@ export async function execute(
 				fields: categoryFields,
 				includes: { category: categoryFields },
 				filter: [{ type: 'equals', field: 'id', value: id }],
+				associations: {
+					children: {},
+					media: {},
+				},
 			};
 
 			await apiRequest.call(this, 'POST', `/category`, createBody);
