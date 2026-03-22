@@ -1,3 +1,9 @@
+export interface NodeProductMedia {
+	url: string;
+	position: number;
+	setAsCover: boolean;
+}
+
 export interface ProductCreatePayload {
 	id?: string;
 	parentId?: string;
@@ -29,6 +35,12 @@ export interface ProductCreatePayload {
 		salesChannelId: string;
 		visibility: number;
 	}>;
+	media?: Array<{
+		id: string;
+		mediaId: string;
+		position: number;
+	}>;
+	coverId?: string;
 	ean?: string;
 	createdAt?: string;
 	updatedAt?: string;

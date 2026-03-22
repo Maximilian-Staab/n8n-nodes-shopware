@@ -438,7 +438,6 @@ export async function execute(
 			const params = extractOrderUpdateParams.call(this, i);
 			const orderId = validateShopwareId(this.getNode(), params.id, i, 'Order ID');
 
-			// 1. Fetch previous order
 			const searchPrevOrderBody = {
 				filter: [{ type: 'equals', field: 'id', value: orderId }],
 				associations: { currency: {} },
@@ -458,7 +457,6 @@ export async function execute(
 				...previousOrderData
 			} = prevOrder;
 
-			// 2. Resolve address updates
 			const customerData: Partial<CustomerData> = {};
 			if (params.billingAddress) {
 				prePaymentOrderStatesPromise ??= getPrePaymentOrderStates.call(this);
@@ -485,7 +483,6 @@ export async function execute(
 				};
 			}
 
-			// 3. Build line items and order pricing
 			let lineItems: ReturnType<typeof buildLineItemPayload>[] = [];
 			let price: ReturnType<typeof buildOrderPrice> | null = null;
 			let transactions: Transaction[] = [];
@@ -540,7 +537,6 @@ export async function execute(
 				});
 			}
 
-			// 4. Build addresses
 			const addresses: Address[] = [];
 			if (params.shippingAddress && customerData.shippingAddress) {
 				addresses.push(buildOrderAddressPayload({
@@ -553,7 +549,6 @@ export async function execute(
 				}));
 			}
 
-			// 5. Build deliveries and shipping costs
 			let deliveries: Delivery[] = [];
 			let shippingCosts: GenericPrice | null = null;
 
@@ -619,7 +614,6 @@ export async function execute(
 				shippingCosts = aggregateDeliveryShippingCostsWithExisting(deliveries, shippingData);
 			}
 
-			// 6. Assemble update payload
 			const updateBody = buildOrderUpdatePayload({
 				customerData,
 				lineItems,
@@ -632,7 +626,6 @@ export async function execute(
 
 			cleanPayload(updateBody, true);
 
-			// 7. State transition and update
 			if (params.orderState === '') {
 				throw new NodeOperationError(this.getNode(), 'Invalid order state', {
 					description: 'Please specify a valid order state from the list',

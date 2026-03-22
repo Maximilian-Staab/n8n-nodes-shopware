@@ -18,6 +18,7 @@ import { productFields } from './fields';
 import { wrapData, getDefaultCurrencyId } from '../../helpers/utils';
 import { extractProductCreateParams } from '../../helpers/params';
 import { buildProductCreatePayload, applyAutoNetPrices, cleanPayload } from '../../helpers/payloadBuilders';
+import { uploadProductMedia } from '../../helpers/media';
 
 const properties: INodeProperties[] = [
 	{
@@ -242,6 +243,48 @@ const properties: INodeProperties[] = [
 		description: 'Choose the sales channels to assign the product to',
 	},
 	{
+		displayName: 'Media',
+		name: 'media',
+		placeholder: 'Add Media',
+		type: 'fixedCollection',
+		typeOptions: {
+			multipleValues: true,
+		},
+		description: 'Images to upload and attach to the product',
+		default: {},
+		options: [
+			{
+				name: 'mediaItem',
+				displayName: 'Media Item',
+				values: [
+					{
+						displayName: 'Image URL',
+						name: 'url',
+						type: 'string',
+						required: true,
+						default: '',
+						placeholder: 'e.g. https://example.com/image.jpg',
+						description: 'URL of the image to upload',
+					},
+					{
+						displayName: 'Position',
+						name: 'position',
+						type: 'number',
+						default: 1,
+						description: 'Display order of this image (lower = first)',
+					},
+					{
+						displayName: 'Set as Cover',
+						name: 'setAsCover',
+						type: 'boolean',
+						default: false,
+						description: 'Whether to use this image as the product cover image',
+					},
+				],
+			},
+		],
+	},
+	{
 		displayName: 'Active',
 		name: 'active',
 		type: 'boolean',
@@ -279,6 +322,14 @@ export async function execute(
 			const taxRate = parseFloat((JSON.parse(params.taxRateRaw) as string[])[2]);
 			applyAutoNetPrices(createBody.price, taxRate);
 			cleanPayload(createBody);
+
+			if (params.nodeMedia && params.nodeMedia.length > 0) {
+				const { media, coverId } = await uploadProductMedia.call(this, params.nodeMedia);
+				createBody.media = media;
+				if (coverId) {
+					createBody.coverId = coverId;
+				}
+			}
 
 			const searchBody = {
 				fields: productFields,

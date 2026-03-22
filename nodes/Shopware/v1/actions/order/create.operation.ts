@@ -545,7 +545,6 @@ export async function execute(
 				i,
 			);
 
-			// 1. Resolve customer data and order customer
 			const customerData: Partial<CustomerData> = {};
 			const globalDefaults: Partial<GlobalDefaults> = {};
 			let orderCustomer: OrderCustomer;
@@ -601,7 +600,6 @@ export async function execute(
 				};
 			}
 
-			// 2. Build line items
 			if (!params.nodeLineItems || params.nodeLineItems.length === 0) {
 				throw new NodeOperationError(this.getNode(), 'Missing order line items', {
 					description: 'At least one line item must be provided',
@@ -622,7 +620,6 @@ export async function execute(
 				}),
 			);
 
-			// 3. Calculate order-level pricing
 			const orderTotals = calculateOrderTotals(lineItems);
 			const price = buildOrderPrice({
 				netPrice: orderTotals.netPrice,
@@ -631,7 +628,6 @@ export async function execute(
 				taxRules: orderTotals.taxRules,
 			});
 
-			// 4. Build transactions
 			let transactions: Transaction[] = [];
 			if (params.nodeTransactions && params.nodeTransactions.length > 0) {
 				transactions = params.nodeTransactions.map((transaction) =>
@@ -647,7 +643,6 @@ export async function execute(
 				);
 			}
 
-			// 5. Build addresses and deliveries
 			const addresses: Address[] = [
 				buildOrderAddressPayload({
 					id: customerData.shippingAddress!.id,
@@ -715,7 +710,6 @@ export async function execute(
 				);
 			}
 
-			// 6. Compute shipping costs
 			let shippingCosts: GenericPrice;
 			if (deliveries.length === 0) {
 				defaultShippingMethodPromise ??= getDefaultShippingMethod.call(this);
@@ -735,7 +729,6 @@ export async function execute(
 				shippingCosts = aggregateDeliveryShippingCosts(deliveries);
 			}
 
-			// 7. Assemble final payload
 			const createBody = buildOrderCreatePayload({
 				orderId,
 				currencyData: params.currencyData,
@@ -755,7 +748,6 @@ export async function execute(
 
 			cleanPayload(createBody);
 
-			// 8. Create and fetch back
 			await apiRequest.call(this, 'POST', `/order`, createBody);
 
 			const searchBody = {

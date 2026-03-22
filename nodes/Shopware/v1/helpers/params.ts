@@ -6,7 +6,7 @@ import type {
 	NodeLineItem,
 	NodeTransaction,
 } from '../actions/order/types';
-import type { NodePrice } from '../actions/product/types';
+import type { NodePrice, NodeProductMedia } from '../actions/product/types';
 import type { NodeCustomerAddress } from '../actions/customer/types';
 import type { NodeChildCategory } from '../actions/category/types';
 
@@ -167,6 +167,7 @@ export interface ProductCreateParams {
 	stock: number;
 	categories: string[];
 	salesChannels: string[];
+	nodeMedia: NodeProductMedia[] | null;
 	active: boolean;
 }
 
@@ -197,6 +198,11 @@ export function extractProductCreateParams(
 		stock: this.getNodeParameter('stock', i) as number,
 		categories: this.getNodeParameter('categories', i) as string[],
 		salesChannels: this.getNodeParameter('salesChannels', i) as string[],
+		nodeMedia: (
+			this.getNodeParameter('media', i) as {
+				mediaItem: Array<NodeProductMedia> | null;
+			}
+		).mediaItem,
 		active: this.getNodeParameter('active', i) as boolean,
 	};
 }

@@ -19,6 +19,8 @@ import { apiRequest } from '../../transport';
 import { extractProductUpdateParams } from '../../helpers/params';
 import { buildProductUpdatePayload, applyAutoNetPrices, cleanPayload } from '../../helpers/payloadBuilders';
 import { validateShopwareId } from '../../helpers/validation';
+import type { NodeProductMedia } from './types';
+import { uploadProductMedia } from '../../helpers/media';
 
 const properties: INodeProperties[] = [
 	{
@@ -81,6 +83,48 @@ const properties: INodeProperties[] = [
 				default: '',
 				placeholder: 'e.g. Apple',
 				description: 'Name of the manufacturer of the product',
+			},
+			{
+				displayName: 'Media',
+				name: 'media',
+				placeholder: 'Add Media',
+				type: 'fixedCollection',
+				typeOptions: {
+					multipleValues: true,
+				},
+				description: 'Images to upload and attach to the product',
+				default: {},
+				options: [
+					{
+						name: 'mediaItem',
+						displayName: 'Media Item',
+						values: [
+							{
+								displayName: 'Image URL',
+								name: 'url',
+								type: 'string',
+								required: true,
+								default: '',
+								placeholder: 'e.g. https://example.com/image.jpg',
+								description: 'URL of the image to upload',
+							},
+							{
+								displayName: 'Position',
+								name: 'position',
+								type: 'number',
+								default: 1,
+								description: 'Display order of this image (lower = first)',
+							},
+							{
+								displayName: 'Set as Cover',
+								name: 'setAsCover',
+								type: 'boolean',
+								default: false,
+								description: 'Whether to use this image as the product cover image',
+							},
+						],
+					},
+				],
 			},
 			{
 				displayName: 'Name',
@@ -261,6 +305,18 @@ export async function execute(
 					: await getProductTaxRate.call(this, id);
 
 				applyAutoNetPrices(updateBody.price, taxRate);
+			}
+
+			const nodeMedia = (
+				updateFields.media as { mediaItem: Array<NodeProductMedia> | null } | null
+			)?.mediaItem;
+
+			if (nodeMedia && nodeMedia.length > 0) {
+				const { media, coverId } = await uploadProductMedia.call(this, nodeMedia, id);
+				updateBody.media = media;
+				if (coverId) {
+					updateBody.coverId = coverId;
+				}
 			}
 
 			await apiRequest.call(this, 'PATCH', `/product/${id}`, updateBody);
