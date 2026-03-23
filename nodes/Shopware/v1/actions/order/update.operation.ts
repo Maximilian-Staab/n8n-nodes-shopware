@@ -537,34 +537,41 @@ export async function execute(
 				});
 			}
 
-			const addresses: Address[] = [];
+			let customerShippingAddress: Address | null = null;
 			if (params.shippingAddress && customerData.shippingAddress) {
-				addresses.push(buildOrderAddressPayload({
+				customerShippingAddress = buildOrderAddressPayload({
 					id: customerData.shippingAddress.id,
 					countryId: customerData.shippingAddress.countryId,
 					firstName: customerData.shippingAddress.firstName,
 					lastName: customerData.shippingAddress.lastName,
 					city: customerData.shippingAddress.city,
 					street: customerData.shippingAddress.street,
-				}));
+				});
 			}
 
 			let deliveries: Delivery[] = [];
 			let shippingCosts: GenericPrice | null = null;
 
 			if (params.nodeDeliveries && params.nodeDeliveries.length > 0) {
-				const existingCustomer = addresses.length === 0
+				const existingCustomer = customerShippingAddress === null
 					&& params.nodeDeliveries.some((delivery) => delivery.customerShippingAddress)
 					? await getCustomerByNumber.call(this, prevOrderCustomer.customerNumber, i)
 					: null;
 				deliveries = await Promise.all(
 					params.nodeDeliveries.map(async (delivery) => {
-						let shippingOrderAddressId: string;
+						let shippingAddress: Address;
 						if (delivery.customerShippingAddress) {
-							if (addresses.length > 0) {
-								shippingOrderAddressId = addresses[0].id;
+							if (customerShippingAddress) {
+								shippingAddress = { ...customerShippingAddress, id: uuidv7() };
 							} else {
-								shippingOrderAddressId = existingCustomer!.defaultShippingAddressId;
+								shippingAddress = {
+									id: uuidv7(),
+									countryId: existingCustomer!.defaultShippingAddressId,
+									firstName: prevOrderCustomer.firstName,
+									lastName: prevOrderCustomer.lastName,
+									street: '',
+									city: '',
+								};
 							}
 						} else {
 							const address = delivery.addressUi.addressValues;
@@ -582,15 +589,14 @@ export async function execute(
 									});
 								}
 							}
-							shippingOrderAddressId = uuidv7();
-							addresses.push(buildOrderAddressPayload({
-								id: shippingOrderAddressId,
+							shippingAddress = buildOrderAddressPayload({
+								id: uuidv7(),
 								countryId: address.country,
 								firstName: address.firstName,
 								lastName: address.lastName,
 								city: address.city,
 								street: address.street,
-							}));
+							});
 						}
 						const shippingMethodDataKey = `${delivery.shippingMethod}:${currencyData.id}`;
 						if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
@@ -601,12 +607,14 @@ export async function execute(
 						}
 						const shippingMethodData = await shippingMethodDataCache.get(shippingMethodDataKey)!;
 						return buildDeliveryPayload({
-							shippingOrderAddressId,
+							shippingAddress,
 							shippingMethodId: delivery.shippingMethod,
 							stateId: delivery.state,
 							shippingPrice: shippingMethodData.unitPrice,
 							shippingTaxRate: shippingMethodData.taxRate,
 							deliveryTime: shippingMethodData.deliveryTime,
+							lineItems,
+							uuidFn: uuidv7,
 						});
 					}),
 				);
@@ -621,7 +629,6 @@ export async function execute(
 				shippingCosts,
 				transactions,
 				deliveries,
-				addresses,
 			});
 
 			cleanPayload(updateBody, true);

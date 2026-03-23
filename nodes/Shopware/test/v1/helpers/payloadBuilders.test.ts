@@ -116,7 +116,6 @@ describe('payload builder helpers', () => {
 			shippingCosts: buildGenericPrice(5, 19),
 			transactions: [],
 			deliveries: [],
-			addresses: [],
 			orderNumber: '10001',
 			dateAndTime: new Date('2026-03-21T10:00:00.000Z'),
 			stateId: 'state-id',
@@ -128,20 +127,24 @@ describe('payload builder helpers', () => {
 	it('aggregates delivery shipping costs across mixed rates and existing shipping data', () => {
 		const deliveries = [
 			{
-				shippingOrderAddressId: 'address-1',
+			id: 'delivery-1',
+				shippingOrderAddress: { id: 'address-1', countryId: 'c1', firstName: 'A', lastName: 'B', street: 'S', city: 'C' },
 				shippingMethodId: 'shipping-1',
 				stateId: 'state-1',
 				shippingDateEarliest: new Date('2026-03-21T10:00:00.000Z'),
 				shippingDateLatest: new Date('2026-03-22T10:00:00.000Z'),
 				shippingCosts: buildGenericPrice(10, 10),
+				positions: [],
 			},
 			{
-				shippingOrderAddressId: 'address-2',
+			id: 'delivery-2',
+				shippingOrderAddress: { id: 'address-2', countryId: 'c2', firstName: 'C', lastName: 'D', street: 'S2', city: 'C2' },
 				shippingMethodId: 'shipping-2',
 				stateId: 'state-2',
 				shippingDateEarliest: new Date('2026-03-21T10:00:00.000Z'),
 				shippingDateLatest: new Date('2026-03-23T10:00:00.000Z'),
 				shippingCosts: buildGenericPrice(20, 20),
+				positions: [],
 			},
 		];
 

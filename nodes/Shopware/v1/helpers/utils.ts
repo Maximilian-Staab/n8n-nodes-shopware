@@ -510,9 +510,10 @@ export async function getLineItemData(
 	return {
 		identifier: product.id,
 		productId: product.id,
+		productNumber: product.productNumber,
 		label: product.name,
 		states: product.states,
-		unitPrice: price.net,
+		unitPrice: price.gross,
 		taxRate,
 	};
 }
@@ -612,9 +613,10 @@ export async function getLineItemDataBatch(
 				{
 					identifier: product.id,
 					productId: product.id,
+					productNumber: product.productNumber,
 					label: product.name,
 					states: product.states,
-					unitPrice: price.net,
+					unitPrice: price.gross,
 					taxRate,
 				},
 			];

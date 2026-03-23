@@ -26,7 +26,7 @@ interface OrderPrice {
 	taxStatus: string;
 }
 
-interface LineItemPrice {
+export interface LineItemPrice {
 	unitPrice: number;
 	totalPrice: number;
 	quantity: number;
@@ -66,13 +66,21 @@ export interface Transaction {
 	amount: GenericPrice;
 }
 
+export interface DeliveryPosition {
+	id: string;
+	orderLineItemId: string;
+	price: LineItemPrice;
+}
+
 export interface Delivery {
-	shippingOrderAddressId: string;
+	id: string;
+	shippingOrderAddress: Address;
 	shippingMethodId: string;
 	stateId: string;
 	shippingDateEarliest: Date;
 	shippingDateLatest: Date;
 	shippingCosts: GenericPrice;
+	positions: DeliveryPosition[];
 }
 
 export interface Address {
@@ -85,11 +93,15 @@ export interface Address {
 }
 
 export interface LineItem {
+	id: string;
+	type: string;
 	identifier: string;
 	productId: string;
+	referencedId: string;
 	quantity: number;
 	label: string;
 	states: string[];
+	payload: { productNumber: string };
 	price: LineItemPrice;
 }
 
@@ -111,7 +123,6 @@ interface OrderBody {
 	shippingCosts: GenericPrice;
 	transactions?: Transaction[];
 	deliveries?: Delivery[];
-	addresses: Address[];
 	lineItems: LineItem[];
 }
 

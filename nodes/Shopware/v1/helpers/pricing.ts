@@ -78,22 +78,22 @@ export interface LineItemPriceResult {
 }
 
 /**
- * Calculates line item price components from a unit price, quantity, and tax rate.
+ * Calculates line item price components from a gross unit price, quantity, and tax rate.
  *
- * @param unitPrice - The unit price (net)
+ * @param grossUnitPrice - The gross unit price (including tax)
  * @param quantity - The quantity
  * @param taxRate - The tax rate percentage
- * @returns An object with unitPrice, totalPrice, tax, and taxPrice
+ * @returns An object with unitPrice (gross), totalPrice (gross), tax, and taxPrice (gross total)
  */
 export function calculateLineItemPrice(
-	unitPrice: number,
+	grossUnitPrice: number,
 	quantity: number,
 	taxRate: number,
 ): LineItemPriceResult {
-	const roundedUnitPrice = roundCurrency(unitPrice);
+	const roundedUnitPrice = roundCurrency(grossUnitPrice);
 	const totalPrice = roundCurrency(roundedUnitPrice * quantity);
-	const tax = roundCurrency(totalPrice * (taxRate / 100));
-	const taxPrice = roundCurrency(totalPrice + tax);
+	const tax = roundCurrency(totalPrice - totalPrice / (1 + taxRate / 100));
+	const taxPrice = totalPrice;
 
 	return { unitPrice: roundedUnitPrice, totalPrice, tax, taxPrice };
 }

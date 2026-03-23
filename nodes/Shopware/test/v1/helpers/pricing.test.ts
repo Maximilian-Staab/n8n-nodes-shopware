@@ -26,6 +26,7 @@ describe('pricing helpers', () => {
 			buildLineItemPayload({
 				identifier: 'line-1',
 				productId: 'product-1',
+				productNumber: 'SW10001',
 				label: 'Tax 10',
 				states: [],
 				unitPrice: 10,
@@ -35,6 +36,7 @@ describe('pricing helpers', () => {
 			buildLineItemPayload({
 				identifier: 'line-2',
 				productId: 'product-2',
+				productNumber: 'SW10002',
 				label: 'Tax 20',
 				states: [],
 				unitPrice: 20,

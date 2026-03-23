@@ -43,7 +43,7 @@ import {
 	buildOrderCreatePayload,
 	cleanPayload,
 } from '../../helpers/payloadBuilders';
-import { buildGenericPrice, calculateOrderTotals } from '../../helpers/pricing';
+import { calculateOrderTotals } from '../../helpers/pricing';
 import { extractOrderCreateParams } from '../../helpers/params';
 
 const properties: INodeProperties[] = [
@@ -644,25 +644,23 @@ export async function execute(
 				);
 			}
 
-			const addresses: Address[] = [
-				buildOrderAddressPayload({
-					id: customerData.shippingAddress!.id,
-					countryId: customerData.shippingAddress!.countryId,
-					firstName: customerData.shippingAddress!.firstName,
-					lastName: customerData.shippingAddress!.lastName,
-					city: customerData.shippingAddress!.city,
-					street: customerData.shippingAddress!.street,
-				}),
-			];
+			const customerShippingAddress: Address = buildOrderAddressPayload({
+				id: customerData.shippingAddress!.id,
+				countryId: customerData.shippingAddress!.countryId,
+				firstName: customerData.shippingAddress!.firstName,
+				lastName: customerData.shippingAddress!.lastName,
+				city: customerData.shippingAddress!.city,
+				street: customerData.shippingAddress!.street,
+			});
 
 			let deliveries: Delivery[] = [];
 			if (params.nodeDeliveries && params.nodeDeliveries.length > 0) {
 				deliveries = await Promise.all(
 					params.nodeDeliveries.map(async (delivery) => {
-						let shippingOrderAddressId: string;
+						let shippingAddress: Address;
 
 						if (delivery.customerShippingAddress) {
-							shippingOrderAddressId = addresses[0].id;
+							shippingAddress = { ...customerShippingAddress, id: uuidv7() };
 						} else {
 							const address = delivery.addressUi.addressValues;
 							if (!address) {
@@ -679,15 +677,14 @@ export async function execute(
 									});
 								}
 							}
-							shippingOrderAddressId = uuidv7();
-							addresses.push(buildOrderAddressPayload({
-								id: shippingOrderAddressId,
+							shippingAddress = buildOrderAddressPayload({
+								id: uuidv7(),
 								countryId: address.country,
 								firstName: address.firstName,
 								lastName: address.lastName,
 								city: address.city,
 								street: address.street,
-							}));
+							});
 						}
 						const shippingMethodDataKey = `${delivery.shippingMethod}:${params.currencyData[0] as string}`;
 						if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
@@ -700,12 +697,14 @@ export async function execute(
 						}
 						const shippingMethodData = await shippingMethodDataCache.get(shippingMethodDataKey)!;
 						return buildDeliveryPayload({
-							shippingOrderAddressId,
+							shippingAddress,
 							shippingMethodId: delivery.shippingMethod,
 							stateId: delivery.state,
 							shippingPrice: shippingMethodData.unitPrice,
 							shippingTaxRate: shippingMethodData.taxRate,
 							deliveryTime: shippingMethodData.deliveryTime,
+							lineItems,
+							uuidFn: uuidv7,
 						});
 					}),
 				);
@@ -725,7 +724,19 @@ export async function execute(
 					);
 				}
 				const shippingMethodData = await shippingMethodDataCache.get(shippingMethodDataKey)!;
-				shippingCosts = buildGenericPrice(shippingMethodData.unitPrice, shippingMethodData.taxRate, 1);
+				deliveries = [
+					buildDeliveryPayload({
+						shippingAddress: { ...customerShippingAddress, id: uuidv7() },
+						shippingMethodId: defaultShippingMethod,
+						stateId: params.stateId,
+						shippingPrice: shippingMethodData.unitPrice,
+						shippingTaxRate: shippingMethodData.taxRate,
+						deliveryTime: shippingMethodData.deliveryTime,
+						lineItems,
+						uuidFn: uuidv7,
+					}),
+				];
+				shippingCosts = aggregateDeliveryShippingCosts(deliveries);
 			} else {
 				shippingCosts = aggregateDeliveryShippingCosts(deliveries);
 			}
@@ -741,7 +752,6 @@ export async function execute(
 				shippingCosts,
 				transactions,
 				deliveries,
-				addresses,
 				orderNumber: params.orderNumber,
 				dateAndTime: params.dateAndTime,
 				stateId: params.stateId,

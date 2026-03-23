@@ -8,6 +8,7 @@ export type GenericOption = {
 type ProductPrice = {
 	currencyId: string;
 	net: number;
+	gross: number;
 };
 
 export interface ProductResponse {
@@ -22,6 +23,7 @@ export interface ProductResponse {
 export interface LineItemResponse {
 	identifier: string;
 	productId: string;
+	productNumber: string;
 	label: string;
 	states: string[];
 	unitPrice: number;

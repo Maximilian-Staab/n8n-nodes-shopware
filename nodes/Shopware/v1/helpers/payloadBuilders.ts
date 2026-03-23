@@ -3,6 +3,7 @@ import { NodeOperationError } from 'n8n-workflow';
 import type {
 	Address,
 	Delivery,
+	DeliveryPosition,
 	GenericPrice,
 	LineItem,
 	OrderCreatePayload,
@@ -23,10 +24,12 @@ import {
 	calculateLineItemPrice,
 	calculateNetFromGross,
 } from './pricing';
+import { uuidv7 } from './utils';
 
 export interface LineItemInput {
 	identifier: string;
 	productId: string;
+	productNumber: string;
 	label: string;
 	states: string[];
 	unitPrice: number;
@@ -67,22 +70,30 @@ export function buildLineItemPayload(input: LineItemInput): LineItem {
 	};
 
 	return {
+		id: uuidv7(),
+		type: 'product',
 		identifier: input.identifier,
 		productId: input.productId,
+		referencedId: input.productId,
 		quantity: input.quantity,
 		label: input.label,
 		states: input.states,
+		payload: {
+			productNumber: input.productNumber,
+		},
 		price,
 	};
 }
 
 export interface DeliveryInput {
-	shippingOrderAddressId: string;
+	shippingAddress: Address;
 	shippingMethodId: string;
 	stateId: string;
 	shippingPrice: number;
 	shippingTaxRate: number;
 	deliveryTime: DeliveryTimeResponse;
+	lineItems: LineItem[];
+	uuidFn: () => string;
 }
 
 /**
@@ -113,13 +124,21 @@ export function buildDeliveryPayload(input: DeliveryInput): Delivery {
 			break;
 	}
 
+	const positions: DeliveryPosition[] = input.lineItems.map((lineItem) => ({
+		id: input.uuidFn(),
+		orderLineItemId: lineItem.id,
+		price: lineItem.price,
+	}));
+
 	return {
-		shippingOrderAddressId: input.shippingOrderAddressId,
+		id: input.uuidFn(),
+		shippingOrderAddress: input.shippingAddress,
 		shippingMethodId: input.shippingMethodId,
 		stateId: input.stateId,
 		shippingDateEarliest,
 		shippingDateLatest,
 		shippingCosts,
+		positions,
 	};
 }
 
@@ -227,8 +246,8 @@ export function buildOrderPrice(input: OrderPriceInput): OrderCreatePayload['pri
 		totalPrice: input.totalPrice,
 		calculatedTaxes: input.calculatedTaxes,
 		taxRules: input.taxRules,
-		positionPrice: input.netPrice,
-		rawTotal: input.netPrice,
+		positionPrice: input.totalPrice,
+		rawTotal: input.totalPrice,
 		taxStatus: 'gross',
 	};
 }
@@ -246,7 +265,6 @@ export interface OrderCreatePayloadInput {
 	shippingCosts: GenericPrice;
 	transactions: Transaction[];
 	deliveries: Delivery[];
-	addresses: Address[];
 	orderNumber: string;
 	dateAndTime: Date;
 	stateId: string;
@@ -298,7 +316,6 @@ export function buildOrderCreatePayload(input: OrderCreatePayloadInput): OrderCr
 		shippingCosts: input.shippingCosts,
 		transactions: input.transactions,
 		deliveries: input.deliveries,
-		addresses: input.addresses,
 	};
 }
 
@@ -311,7 +328,6 @@ export interface OrderUpdatePayloadInput {
 	shippingCosts: GenericPrice | null;
 	transactions: Transaction[];
 	deliveries: Delivery[];
-	addresses: Address[];
 }
 
 /**
@@ -338,7 +354,6 @@ export function buildOrderUpdatePayload(input: OrderUpdatePayloadInput): OrderUp
 		shippingCosts: input.shippingCosts,
 		transactions: input.transactions,
 		deliveries: input.deliveries,
-		addresses: input.addresses,
 	};
 }
 
