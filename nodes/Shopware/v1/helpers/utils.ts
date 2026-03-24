@@ -28,7 +28,12 @@ import {
 	ShippingMethodDataResponse,
 	ShippingMethodPrice,
 } from '../actions/types';
-import { categoryFilterHandlers, customerFilterHandlers, orderFilterHandlers, productFilterHandlers } from './handlers';
+import {
+	categoryFilterHandlers,
+	customerFilterHandlers,
+	orderFilterHandlers,
+	productFilterHandlers,
+} from './handlers';
 
 function getFirstDataEntry<T>(
 	this: IExecuteFunctions,
@@ -128,13 +133,11 @@ export async function getDefaultLanguageId(this: IExecuteFunctions): Promise<str
 		],
 	};
 
-	try {
-		const response = await apiRequest.call(this, 'POST', `/search/language`, body);
-		const defaultLanguage = (response as { data?: Array<{ id: string }> }).data?.[0];
-		if (defaultLanguage) {
-			return defaultLanguage.id;
-		}
-	} catch {}
+	const response = await apiRequest.call(this, 'POST', `/search/language`, body);
+	const defaultLanguage = (response as { data?: Array<{ id: string }> }).data?.[0];
+	if (defaultLanguage) {
+		return defaultLanguage.id;
+	}
 
 	const fallbackResponse = await apiRequest.call(this, 'POST', `/search/language`, {
 		fields: genericFields,
@@ -260,7 +263,11 @@ export async function getShippingMethodData(
 	shippingMethodId: string,
 	currencyId: string,
 ): Promise<ShippingMethodDataResponse> {
-	const { unitPrice, taxRate } = await getShippingMethodFullData.call(this, shippingMethodId, currencyId);
+	const { unitPrice, taxRate } = await getShippingMethodFullData.call(
+		this,
+		shippingMethodId,
+		currencyId,
+	);
 	return { unitPrice, taxRate };
 }
 
@@ -291,9 +298,9 @@ export async function getShippingMethodFullData(
 		});
 	}
 
-	const shippingPrice = (shippingMethod.prices?.[0]?.currencyPrice as Array<ShippingMethodPrice> | undefined)?.find(
-		(price) => price.currencyId === currencyId,
-	);
+	const shippingPrice = (
+		shippingMethod.prices?.[0]?.currencyPrice as Array<ShippingMethodPrice> | undefined
+	)?.find((price) => price.currencyId === currencyId);
 	if (!shippingPrice) {
 		throw new NodeOperationError(this.getNode(), 'Shipping method price missing', {
 			description: `Shipping method ${shippingMethodId} does not have a price for currency ${currencyId}.`,
@@ -547,7 +554,8 @@ async function getCountryStatesByCountryId(
 					],
 				};
 
-				return ((await apiRequest.call(this, 'POST', `/search/country-state`, body)).data ?? []) as CountryStateResponse[];
+				return ((await apiRequest.call(this, 'POST', `/search/country-state`, body)).data ??
+					[]) as CountryStateResponse[];
 			})(),
 		);
 	}
@@ -637,7 +645,8 @@ async function getTaxRatesByIds(
 			},
 		],
 	};
-	const taxes = ((await apiRequest.call(this, 'POST', `/search/tax`, taxBody)).data ?? []) as Array<{
+	const taxes = ((await apiRequest.call(this, 'POST', `/search/tax`, taxBody)).data ??
+		[]) as Array<{
 		id: string;
 		taxRate: number;
 	}>;
@@ -669,14 +678,16 @@ export async function getLineItemDataBatch(
 			},
 		],
 	};
-	const products = ((await apiRequest.call(this, 'POST', `/search/product`, body)).data ?? []) as ProductResponse[];
+	const products = ((await apiRequest.call(this, 'POST', `/search/product`, body)).data ??
+		[]) as ProductResponse[];
 	const productMap = new Map(products.map((product) => [product.productNumber, product]));
-	const missingProductNumbers = uniqueProductNumbers.filter((productNumber) => !productMap.has(productNumber));
+	const missingProductNumbers = uniqueProductNumbers.filter(
+		(productNumber) => !productMap.has(productNumber),
+	);
 
 	if (missingProductNumbers.length > 0) {
 		throw new NodeOperationError(this.getNode(), 'No product found', {
-			description:
-				'There is no product associated with product number ' + missingProductNumbers[0],
+			description: 'There is no product associated with product number ' + missingProductNumbers[0],
 			itemIndex,
 		});
 	}
@@ -844,7 +855,6 @@ export function constructSearchBody(
 					}
 				});
 		}
-
 	}
 
 	if (associations && associations.length > 0) {

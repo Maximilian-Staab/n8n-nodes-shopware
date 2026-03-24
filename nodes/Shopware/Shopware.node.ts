@@ -8,7 +8,6 @@ export class Shopware extends VersionedNodeType {
 		const baseDescription: INodeTypeBaseDescription = {
 			displayName: 'Shopware',
 			name: 'shopware',
-			// eslint-disable-next-line n8n-nodes-base/node-class-description-icon-not-svg
 			icon: 'file:../../shopwareNodeIcon.svg',
 			group: ['input'],
 			description: 'Read, update, write and delete data from Shopware',

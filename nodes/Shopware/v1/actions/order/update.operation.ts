@@ -494,7 +494,6 @@ export async function execute(
 
 			const {
 				currency: currencyData,
-				shippingCosts: shippingData,
 				orderCustomer: prevOrderCustomer,
 				...previousOrderData
 			} = prevOrder;

@@ -9,7 +9,6 @@ import * as category from './category/Category.resource';
 export const versionDescription: INodeTypeDescription = {
 	displayName: 'Shopware',
 	name: 'shopware',
-	// eslint-disable-next-line n8n-nodes-base/node-class-description-icon-not-svg
 	icon: 'file:../../shopwareNodeIcon.svg',
 	group: ['input'],
 	version: [1],
