@@ -86,7 +86,7 @@ Detailed, ready-to-import examples are available under [Examples](examples/low-s
 |-----------|---------|
 | **n8n**	| Latest stable release |
 | **Shopware** | 6.6.x.x & 6.7.x.x|
-| **Node Package** | 1.4.5 |
+| **Node Package** | 2.0.0 |
 
 For best compatibility, keep your n8n instance up to date.
 
@@ -118,6 +118,7 @@ If you encounter issues such as authentication errors, missing resources, or API
 | **1.4.3**       | Added credentials explicitly to the base versioned node.                 |
 | **1.4.4**       | Added line-items, currency, deliveries and transactions data to order. Changed node icon format to SVG.|
 | **1.4.5**       | Removed debug statements from code.                                        |
+| **2.0.0**       | Large refactor, validation fixes, correct tax calculations and rounding, significant optimizations, media upload for products, more associations for resources, better error handling and surfacing, line item pricing fix, order delivery versioning fix, complete fields for addresses, filters fix.                                        |
 
 ## Documentation Index
 
@@ -128,4 +129,4 @@ If you encounter issues such as authentication errors, missing resources, or API
 
 ---
 
-© 2025 Solution25 — Released under the [Fair-Code License](https://faircode.io/)
+© 2026 Solution25 — Released under the [Fair-Code License](https://faircode.io/)
