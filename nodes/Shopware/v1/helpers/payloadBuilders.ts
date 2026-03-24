@@ -86,6 +86,7 @@ export function buildLineItemPayload(input: LineItemInput): LineItem {
 }
 
 export interface DeliveryInput {
+	deliveryId?: string;
 	shippingAddress: Address;
 	shippingMethodId: string;
 	stateId: string;
@@ -131,7 +132,7 @@ export function buildDeliveryPayload(input: DeliveryInput): Delivery {
 	}));
 
 	return {
-		id: input.uuidFn(),
+		id: input.deliveryId ?? input.uuidFn(),
 		shippingOrderAddress: input.shippingAddress,
 		shippingMethodId: input.shippingMethodId,
 		stateId: input.stateId,

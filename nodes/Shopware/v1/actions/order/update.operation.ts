@@ -40,7 +40,6 @@ import {
 	buildTransactionPayload,
 	buildOrderPrice,
 	buildOrderUpdatePayload,
-	aggregateDeliveryShippingCostsWithExisting,
 	cleanPayload,
 } from '../../helpers/payloadBuilders';
 import { calculateOrderTotals } from '../../helpers/pricing';
@@ -165,17 +164,6 @@ const properties: INodeProperties[] = [
 								required: true,
 								default: '',
 								description: 'Delivery shipping method',
-							},
-							{
-								displayName: 'State',
-								name: 'state',
-								type: 'options',
-								typeOptions: {
-									loadOptionsMethod: 'getDeliveryStates',
-								},
-								required: true,
-								default: '',
-								description: 'State of the delivery (e.g. Shipped)',
 							},
 							{
 								displayName: 'Use Customer Shipping Address',
@@ -485,7 +473,16 @@ export async function execute(
 
 			const searchPrevOrderBody = {
 				filter: [{ type: 'equals', field: 'id', value: orderId }],
-				associations: { currency: {} },
+				associations: {
+					currency: {},
+					lineItems: {},
+					deliveries: {
+						associations: {
+							shippingOrderAddress: {},
+							positions: {},
+						},
+					},
+				},
 			};
 			const prevOrder = (await apiRequest.call(this, 'POST', `/search/order`, searchPrevOrderBody)).data[0] as OrderResponse;
 			if (!prevOrder) {
@@ -602,6 +599,8 @@ export async function execute(
 				});
 			}
 
+			const effectiveLineItems = lineItems.length > 0 ? lineItems : (prevOrder.lineItems ?? []);
+
 			let customerShippingAddress: Address | null = null;
 			if (params.shippingAddress && customerData.shippingAddress) {
 				customerShippingAddress = buildOrderAddressPayload({
@@ -617,90 +616,122 @@ export async function execute(
 				});
 			}
 
-			let deliveries: Delivery[] = [];
-			let shippingCosts: GenericPrice | null = null;
+			const deliveries: Delivery[] = [];
+			const shippingCosts: GenericPrice | null = null;
 
 			if (params.nodeDeliveries && params.nodeDeliveries.length > 0) {
+				if (effectiveLineItems.length === 0) {
+					throw new NodeOperationError(this.getNode(), 'Missing order line items for delivery update', {
+						description: 'The order does not contain line items that can be used to rebuild delivery positions.',
+						itemIndex: i,
+					});
+				}
+				if (!prevOrder.deliveries || prevOrder.deliveries.length < params.nodeDeliveries.length) {
+					throw new NodeOperationError(this.getNode(), 'Delivery update is invalid', {
+						description: 'The order does not contain enough existing deliveries to update.',
+						itemIndex: i,
+					});
+				}
 				const existingCustomer = customerShippingAddress === null
 					&& params.nodeDeliveries.some((delivery) => delivery.customerShippingAddress)
 					? await getCustomerByNumber.call(this, prevOrderCustomer.customerNumber, i)
 					: null;
-				deliveries = await Promise.all(
-					params.nodeDeliveries.map(async (delivery) => {
-						let shippingAddress: Address;
-						if (delivery.customerShippingAddress) {
-							if (customerShippingAddress) {
-								shippingAddress = { ...customerShippingAddress, id: uuidv7() };
-							} else {
-								shippingAddress = {
-									id: uuidv7(),
-									countryId: existingCustomer!.shippingAddress.countryId,
-									countryStateId: existingCustomer!.shippingAddress.countryStateId,
-									salutationId: existingCustomer!.shippingAddress.salutationId,
-									firstName: existingCustomer!.shippingAddress.firstName,
-									lastName: existingCustomer!.shippingAddress.lastName,
-									zipcode: existingCustomer!.shippingAddress.zipcode,
-									street: existingCustomer!.shippingAddress.street,
-									city: existingCustomer!.shippingAddress.city,
-								};
-							}
+				for (let deliveryIndex = 0; deliveryIndex < params.nodeDeliveries.length; deliveryIndex++) {
+					const delivery = params.nodeDeliveries[deliveryIndex];
+					const existingDelivery = prevOrder.deliveries[deliveryIndex];
+					let shippingAddress: Address;
+
+					if (delivery.customerShippingAddress) {
+						if (customerShippingAddress) {
+							shippingAddress = {
+								...customerShippingAddress,
+								id: existingDelivery.shippingOrderAddress.id,
+							};
 						} else {
-							const address = delivery.addressUi.addressValues;
-							if (!address) {
-								throw new NodeOperationError(this.getNode(), 'Missing shipping address', {
-									description: 'A shipping address must be provided for the selected delivery if not using the customer one',
+							shippingAddress = {
+								id: existingDelivery.shippingOrderAddress.id,
+								countryId: existingCustomer!.shippingAddress.countryId,
+								countryStateId: existingCustomer!.shippingAddress.countryStateId,
+								salutationId: existingCustomer!.shippingAddress.salutationId,
+								firstName: existingCustomer!.shippingAddress.firstName,
+								lastName: existingCustomer!.shippingAddress.lastName,
+								zipcode: existingCustomer!.shippingAddress.zipcode,
+								street: existingCustomer!.shippingAddress.street,
+								city: existingCustomer!.shippingAddress.city,
+							};
+						}
+					} else {
+						const address = delivery.addressUi.addressValues;
+						if (!address) {
+							throw new NodeOperationError(this.getNode(), 'Missing shipping address', {
+								description: 'A shipping address must be provided for the selected delivery if not using the customer one',
+								itemIndex: i,
+							});
+						}
+						for (const key of ['country', 'firstName', 'lastName', 'city', 'street'] as Array<keyof AddressValues>) {
+							if (address[key] === '') {
+								throw new NodeOperationError(this.getNode(), 'Missing required value for shipping address', {
+									description: `Shipping address ${key} must be a valid value.`,
 									itemIndex: i,
 								});
 							}
-							for (const key of ['country', 'firstName', 'lastName', 'city', 'street'] as Array<keyof AddressValues>) {
-								if (address[key] === '') {
-									throw new NodeOperationError(this.getNode(), 'Missing required value for shipping address', {
-										description: `Shipping address ${key} must be a valid value.`,
-										itemIndex: i,
-									});
-								}
-							}
-							shippingAddress = buildOrderAddressPayload({
-								id: uuidv7(),
-								countryId: address.country,
-								countryStateId: await resolveCountryStateId.call(
-									this,
-									address.country,
-									address.state,
-									countryStateCache,
-									i,
-									'Delivery state / province',
-								),
-								salutationId: prevOrderCustomer.salutationId,
-								firstName: address.firstName,
-								lastName: address.lastName,
-								zipcode: address.zipcode ?? '',
-								city: address.city,
-								street: address.street,
-							});
 						}
-						const shippingMethodDataKey = `${delivery.shippingMethod}:${currencyData.id}`;
-						if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
-							shippingMethodDataCache.set(
-								shippingMethodDataKey,
-								getShippingMethodFullData.call(this, delivery.shippingMethod, currencyData.id),
-							);
-						}
-						const shippingMethodData = await shippingMethodDataCache.get(shippingMethodDataKey)!;
-						return buildDeliveryPayload({
-							shippingAddress,
-							shippingMethodId: delivery.shippingMethod,
-							stateId: delivery.state,
-							shippingPrice: shippingMethodData.unitPrice,
-							shippingTaxRate: shippingMethodData.taxRate,
-							deliveryTime: shippingMethodData.deliveryTime,
-							lineItems,
-							uuidFn: uuidv7,
+						shippingAddress = buildOrderAddressPayload({
+							id: existingDelivery.shippingOrderAddress.id,
+							countryId: address.country,
+							countryStateId: await resolveCountryStateId.call(
+								this,
+								address.country,
+								address.state,
+								countryStateCache,
+								i,
+								'Delivery state / province',
+							),
+							salutationId: prevOrderCustomer.salutationId,
+							firstName: address.firstName,
+							lastName: address.lastName,
+							zipcode: address.zipcode ?? '',
+							city: address.city,
+							street: address.street,
 						});
-					}),
-				);
+					}
 
-				shippingCosts = aggregateDeliveryShippingCostsWithExisting(deliveries, shippingData);
+					await apiRequest.call(this, 'PATCH', `/order-address/${existingDelivery.shippingOrderAddress.id}`, shippingAddress);
+
+					const shippingMethodDataKey = `${delivery.shippingMethod}:${currencyData.id}`;
+					if (!shippingMethodDataCache.has(shippingMethodDataKey)) {
+						shippingMethodDataCache.set(
+							shippingMethodDataKey,
+							getShippingMethodFullData.call(this, delivery.shippingMethod, currencyData.id),
+						);
+					}
+					const shippingMethodData = await shippingMethodDataCache.get(shippingMethodDataKey)!;
+					const patchedDelivery = buildDeliveryPayload({
+						deliveryId: existingDelivery.id,
+						shippingAddress,
+						shippingMethodId: delivery.shippingMethod,
+						stateId: existingDelivery.stateId,
+						shippingPrice: shippingMethodData.unitPrice,
+						shippingTaxRate: shippingMethodData.taxRate,
+						deliveryTime: shippingMethodData.deliveryTime,
+						lineItems: effectiveLineItems,
+						uuidFn: uuidv7,
+					});
+
+					await apiRequest.call(this, 'PATCH', `/order-delivery/${existingDelivery.id}`, {
+						shippingMethodId: patchedDelivery.shippingMethodId,
+						shippingCosts: patchedDelivery.shippingCosts,
+						shippingDateEarliest: patchedDelivery.shippingDateEarliest,
+						shippingDateLatest: patchedDelivery.shippingDateLatest,
+					});
+				}
+			} else if (customerShippingAddress && prevOrder.deliveries && prevOrder.deliveries.length > 0) {
+				for (const delivery of prevOrder.deliveries) {
+					await apiRequest.call(this, 'PATCH', `/order-address/${delivery.shippingOrderAddress.id}`, {
+						...customerShippingAddress,
+						id: delivery.shippingOrderAddress.id,
+					});
+				}
 			}
 
 			const updateBody = buildOrderUpdatePayload({
@@ -729,7 +760,7 @@ export async function execute(
 				);
 			}
 
-			if (Object.keys(params.updateFields).length !== 0) {
+			if (Object.keys(updateBody).length !== 0) {
 				await apiRequest.call(this, 'PATCH', `/order/${orderId}`, updateBody);
 			}
 

@@ -783,7 +783,7 @@ export async function execute(
 						return buildDeliveryPayload({
 							shippingAddress,
 							shippingMethodId: delivery.shippingMethod,
-							stateId: delivery.state,
+							stateId: delivery.state!,
 							shippingPrice: shippingMethodData.unitPrice,
 							shippingTaxRate: shippingMethodData.taxRate,
 							deliveryTime: shippingMethodData.deliveryTime,

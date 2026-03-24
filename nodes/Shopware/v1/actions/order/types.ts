@@ -165,7 +165,7 @@ export type NodeTransaction = {
 
 export type NodeDelivery = {
 	shippingMethod: string;
-	state: string;
+	state?: string;
 	customerShippingAddress: boolean;
 	addressUi: {
 		addressValues: AddressValues
