@@ -83,3 +83,4 @@ For general n8n usage, see the [Try it out guide](https://docs.n8n.io/try-it-out
 | **1.4.3**       | Added credentials explicitly to the base versioned node.                 |
 | **1.4.4**       | Added line-items, currency, deliveries and transactions data to order. Changed node icon format to SVG.|
 | **1.4.5**       | Removed debug statements from code.                                        |
+| **2.0.0**       | Large refactor, validation fixes, correct tax calculations and rounding, significant optimizations, media upload for products, more associations for resources, better error handling and surfacing, line item pricing fix, order delivery versioning fix, complete fields for addresses, filters fix.                                        |
