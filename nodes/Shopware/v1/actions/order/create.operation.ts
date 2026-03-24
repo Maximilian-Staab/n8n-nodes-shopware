@@ -22,6 +22,7 @@ import type {
 	OrderCustomer,
 	Transaction,
 } from './types';
+import type { CountryStateResponse } from '../types';
 import { apiRequest } from '../../transport';
 import { orderFields } from './fields';
 import {
@@ -29,6 +30,7 @@ import {
 	uuidv7,
 	getCustomerByNumber,
 	getLineItemDataBatch,
+	resolveCountryStateId,
 	getShippingMethodFullData,
 	getDefaultShippingMethod,
 	getDefaultLanguageId,
@@ -200,6 +202,20 @@ const properties: INodeProperties[] = [
 						description: 'Customer last name',
 					},
 					{
+						displayName: 'Zip Code',
+						name: 'zipcode',
+						type: 'string',
+						default: '',
+						description: 'Billing address postal code',
+					},
+					{
+						displayName: 'State / Province',
+						name: 'state',
+						type: 'string',
+						default: '',
+						description: 'Optional state or province name/code for the billing address',
+					},
+					{
 						displayName: 'City',
 						name: 'city',
 						type: 'string',
@@ -266,6 +282,20 @@ const properties: INodeProperties[] = [
 						default: '',
 						description: 'Customer last name',
 					},
+					{
+						displayName: 'Zip Code',
+						name: 'zipcode',
+						type: 'string',
+						default: '',
+						description: 'Shipping address postal code',
+					},
+										{
+											displayName: 'State / Province',
+											name: 'state',
+											type: 'string',
+											default: '',
+											description: 'Optional state or province name/code for the shipping address',
+										},
 					{
 						displayName: 'City',
 						name: 'city',
@@ -488,6 +518,20 @@ const properties: INodeProperties[] = [
 										description: 'Customer last name',
 									},
 									{
+										displayName: 'Zip Code',
+										name: 'zipcode',
+										type: 'string',
+										default: '',
+										description: 'Shipping address postal code',
+									},
+										{
+											displayName: 'State / Province',
+											name: 'state',
+											type: 'string',
+											default: '',
+											description: 'Optional state or province name/code for the shipping address',
+										},
+									{
 										displayName: 'City',
 										name: 'city',
 										type: 'string',
@@ -533,6 +577,7 @@ export async function execute(
 		string,
 		Promise<Awaited<ReturnType<typeof getShippingMethodFullData>>>
 	>();
+	const countryStateCache = new Map<string, Promise<CountryStateResponse[]>>();
 
 	for (let i = 0; i < items.length; i++) {
 		try {
@@ -558,8 +603,14 @@ export async function execute(
 				customerData.lastName = customer.lastName;
 				customerData.email = customer.email;
 				customerData.salutationId = customer.salutationId;
-				customerData.billingAddress = customer.billingAddress;
-				customerData.shippingAddress = customer.shippingAddress;
+				customerData.billingAddress = {
+					...customer.billingAddress,
+					id: uuidv7(),
+				};
+				customerData.shippingAddress = {
+					...customer.shippingAddress,
+					id: uuidv7(),
+				};
 				orderCustomer = {
 					firstName: customer.firstName,
 					lastName: customer.lastName,
@@ -579,16 +630,36 @@ export async function execute(
 				customerData.billingAddress = {
 					id: uuidv7(),
 					countryId: params.guestBillingAddress!.country,
+					countryStateId: await resolveCountryStateId.call(
+						this,
+						params.guestBillingAddress!.country,
+						params.guestBillingAddress!.state,
+						countryStateCache,
+						i,
+						'Billing state / province',
+					),
+					salutationId: params.guest!.salutation,
 					firstName: params.guestBillingAddress!.firstName,
 					lastName: params.guestBillingAddress!.lastName,
+					zipcode: params.guestBillingAddress!.zipcode ?? '',
 					city: params.guestBillingAddress!.city,
 					street: params.guestBillingAddress!.street,
 				};
 				customerData.shippingAddress = {
 					id: uuidv7(),
 					countryId: params.guestShippingAddress!.country,
+					countryStateId: await resolveCountryStateId.call(
+						this,
+						params.guestShippingAddress!.country,
+						params.guestShippingAddress!.state,
+						countryStateCache,
+						i,
+						'Shipping state / province',
+					),
+					salutationId: params.guest!.salutation,
 					firstName: params.guestShippingAddress!.firstName,
 					lastName: params.guestShippingAddress!.lastName,
+					zipcode: params.guestShippingAddress!.zipcode ?? '',
 					city: params.guestShippingAddress!.city,
 					street: params.guestShippingAddress!.street,
 				};
@@ -647,8 +718,11 @@ export async function execute(
 			const customerShippingAddress: Address = buildOrderAddressPayload({
 				id: customerData.shippingAddress!.id,
 				countryId: customerData.shippingAddress!.countryId,
+				countryStateId: customerData.shippingAddress!.countryStateId,
+				salutationId: customerData.shippingAddress!.salutationId,
 				firstName: customerData.shippingAddress!.firstName,
 				lastName: customerData.shippingAddress!.lastName,
+				zipcode: customerData.shippingAddress!.zipcode,
 				city: customerData.shippingAddress!.city,
 				street: customerData.shippingAddress!.street,
 			});
@@ -669,8 +743,8 @@ export async function execute(
 									itemIndex: i,
 								});
 							}
-							for (const key in address) {
-								if (address[key as keyof AddressValues] === '') {
+							for (const key of ['country', 'firstName', 'lastName', 'city', 'street'] as Array<keyof AddressValues>) {
+								if (address[key] === '') {
 									throw new NodeOperationError(this.getNode(), 'Missing required value for shipping address', {
 										description: `Shipping address ${key} must be a valid value.`,
 										itemIndex: i,
@@ -680,8 +754,18 @@ export async function execute(
 							shippingAddress = buildOrderAddressPayload({
 								id: uuidv7(),
 								countryId: address.country,
+								countryStateId: await resolveCountryStateId.call(
+									this,
+									address.country,
+									address.state,
+									countryStateCache,
+									i,
+									'Delivery state / province',
+								),
+								salutationId: customerData.salutationId!,
 								firstName: address.firstName,
 								lastName: address.lastName,
+								zipcode: address.zipcode ?? '',
 								city: address.city,
 								street: address.street,
 							});

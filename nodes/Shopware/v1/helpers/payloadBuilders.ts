@@ -145,8 +145,11 @@ export function buildDeliveryPayload(input: DeliveryInput): Delivery {
 export interface OrderAddressInput {
 	id: string;
 	countryId: string;
+	countryStateId?: string | null;
+	salutationId: string;
 	firstName: string;
 	lastName: string;
+	zipcode: string;
 	city: string;
 	street: string;
 }
@@ -161,8 +164,11 @@ export function buildOrderAddressPayload(input: OrderAddressInput): Address {
 	return {
 		id: input.id,
 		countryId: input.countryId,
+		countryStateId: input.countryStateId ?? null,
+		salutationId: input.salutationId,
 		firstName: input.firstName,
 		lastName: input.lastName,
+		zipcode: input.zipcode,
 		city: input.city,
 		street: input.street,
 	};
@@ -266,7 +272,7 @@ export interface OrderCreatePayloadInput {
 	transactions: Transaction[];
 	deliveries: Delivery[];
 	orderNumber: string;
-	dateAndTime: Date;
+	dateAndTime: string;
 	stateId: string;
 }
 
@@ -291,8 +297,11 @@ export function buildOrderCreatePayload(input: OrderCreatePayloadInput): OrderCr
 	const serializedBillingAddress = buildOrderAddressPayload({
 		id: input.customerData.billingAddress!.id,
 		countryId: input.customerData.billingAddress!.countryId,
+		countryStateId: input.customerData.billingAddress!.countryStateId,
+		salutationId: input.customerData.billingAddress!.salutationId,
 		firstName: input.customerData.billingAddress!.firstName,
 		lastName: input.customerData.billingAddress!.lastName,
+		zipcode: input.customerData.billingAddress!.zipcode,
 		city: input.customerData.billingAddress!.city,
 		street: input.customerData.billingAddress!.street,
 	});
@@ -304,7 +313,7 @@ export function buildOrderCreatePayload(input: OrderCreatePayloadInput): OrderCr
 		salesChannelId: input.globalDefaults.salesChannelId!,
 		billingAddressId: input.customerData.billingAddress!.id,
 		orderNumber: input.orderNumber,
-		orderDateTime: input.dateAndTime,
+		orderDateTime: new Date(input.dateAndTime),
 		stateId: input.stateId,
 		currencyFactor: Number(input.currencyData[2]),
 		itemRounding,
@@ -339,8 +348,11 @@ export function buildOrderUpdatePayload(input: OrderUpdatePayloadInput): OrderUp
 		serializedBillingAddress = {
 			id: input.customerData.billingAddress.id,
 			countryId: input.customerData.billingAddress.countryId,
+			countryStateId: input.customerData.billingAddress.countryStateId,
+			salutationId: input.customerData.billingAddress.salutationId,
 			firstName: input.customerData.billingAddress.firstName,
 			lastName: input.customerData.billingAddress.lastName,
+			zipcode: input.customerData.billingAddress.zipcode,
 			city: input.customerData.billingAddress.city,
 			street: input.customerData.billingAddress.street,
 		};
@@ -552,8 +564,10 @@ export function buildCustomerAddresses(
 		return {
 			id: addressId,
 			countryId: address.country,
+			countryStateId: address.countryStateId || null,
 			firstName: address.firstName,
 			lastName: address.lastName,
+			zipcode: address.zipcode ?? '',
 			city: address.city,
 			street: address.street,
 			salutationId,

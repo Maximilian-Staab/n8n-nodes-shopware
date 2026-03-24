@@ -46,8 +46,11 @@ export interface OrderCustomer {
 interface BillingAddress {
 	id: string;
 	countryId: string;
+	countryStateId?: string | null;
+	salutationId: string;
 	firstName: string;
 	lastName: string;
+	zipcode: string;
 	street: string;
 	city: string;
 }
@@ -86,8 +89,11 @@ export interface Delivery {
 export interface Address {
 	id: string;
 	countryId: string;
+	countryStateId?: string | null;
+	salutationId: string;
 	firstName: string;
 	lastName: string;
+	zipcode: string;
 	street: string;
 	city: string;
 }
@@ -168,8 +174,11 @@ export type NodeDelivery = {
 
 export type AddressValues = {
 	country: string;
+	state?: string;
+	countryStateId?: string;
 	firstName: string;
 	lastName: string;
+	zipcode?: string;
 	city: string;
 	street: string;
 }
@@ -197,8 +206,11 @@ export type NodeCustomerDetails = {
 
 export type NodeCustomerAddressDetails = {
 	country: string;
+	state?: string;
+	countryStateId?: string | null;
 	firstName: string;
 	lastName: string;
+	zipcode?: string;
 	city: string;
 	street: string;
 }

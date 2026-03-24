@@ -12,7 +12,8 @@ import {
 	NodeOperationError,
 } from 'n8n-workflow';
 import type { NodeCustomerAddress } from './types';
-import { uuidv7, wrapData } from '../../helpers/utils';
+import type { CountryStateResponse } from '../types';
+import { resolveCountryStateId, uuidv7, wrapData } from '../../helpers/utils';
 import { customerFields } from './fields';
 import { apiRequest } from '../../transport';
 import { extractCustomerUpdateParams } from '../../helpers/params';
@@ -78,6 +79,20 @@ const properties: INodeProperties[] = [
 								required: true,
 								default: '',
 								description: 'Customer last name',
+							},
+							{
+								displayName: 'Zip Code',
+								name: 'zipcode',
+								type: 'string',
+								default: '',
+								description: "Customer's postal code",
+							},
+							{
+								displayName: 'State / Province',
+								name: 'state',
+								type: 'string',
+								default: '',
+								description: 'Optional state or province name/code for the address',
 							},
 							{
 								displayName: 'City',
@@ -206,6 +221,7 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
+			const countryStateCache = new Map<string, Promise<CountryStateResponse[]>>();
 			const id = validateShopwareId(
 				this.getNode(),
 				this.getNodeParameter('id', i) as string,
@@ -249,8 +265,22 @@ export async function execute(
 			)?.address;
 
 			if (nodeAddresses && nodeAddresses.length > 0) {
+				const resolvedAddresses = await Promise.all(
+					nodeAddresses.map(async (address) => ({
+						...address,
+						countryStateId: await resolveCountryStateId.call(
+							this,
+							address.country,
+							address.state,
+							countryStateCache,
+							i,
+							'State / Province',
+						),
+					})),
+				);
+
 				addresses = buildCustomerAddresses(
-					nodeAddresses,
+					resolvedAddresses,
 					customer.salutationId,
 					uuidv7,
 					this.getNode(),

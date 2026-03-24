@@ -1,6 +1,7 @@
 import {
 	aggregateDeliveryShippingCosts,
 	aggregateDeliveryShippingCostsWithExisting,
+	buildCustomerAddresses,
 	buildOrderCreatePayload,
 	buildOrderPrice,
 	buildTransactionPayload,
@@ -93,8 +94,11 @@ describe('payload builder helpers', () => {
 				billingAddress: {
 					id: 'billing-id',
 					countryId: 'country-id',
+					countryStateId: 'state-id',
+					salutationId: 'salutation-id',
 					firstName: 'Jane',
 					lastName: 'Doe',
+					zipcode: '10115',
 					city: 'Berlin',
 					street: 'Example Street 1',
 				},
@@ -117,18 +121,29 @@ describe('payload builder helpers', () => {
 			transactions: [],
 			deliveries: [],
 			orderNumber: '10001',
-			dateAndTime: new Date('2026-03-21T10:00:00.000Z'),
+			dateAndTime: '2026-03-21T10:00:00.000Z',
 			stateId: 'state-id',
 		});
 
 		expect(orderPayload.currencyFactor).toBe(0.85);
+		expect(orderPayload.billingAddress).toEqual({
+			id: 'billing-id',
+			countryId: 'country-id',
+			countryStateId: 'state-id',
+			salutationId: 'salutation-id',
+			firstName: 'Jane',
+			lastName: 'Doe',
+			zipcode: '10115',
+			city: 'Berlin',
+			street: 'Example Street 1',
+		});
 	});
 
 	it('aggregates delivery shipping costs across mixed rates and existing shipping data', () => {
 		const deliveries = [
 			{
 			id: 'delivery-1',
-				shippingOrderAddress: { id: 'address-1', countryId: 'c1', firstName: 'A', lastName: 'B', street: 'S', city: 'C' },
+				shippingOrderAddress: { id: 'address-1', countryId: 'c1', countryStateId: null, salutationId: 'sal-1', firstName: 'A', lastName: 'B', zipcode: '10000', street: 'S', city: 'C' },
 				shippingMethodId: 'shipping-1',
 				stateId: 'state-1',
 				shippingDateEarliest: new Date('2026-03-21T10:00:00.000Z'),
@@ -138,7 +153,7 @@ describe('payload builder helpers', () => {
 			},
 			{
 			id: 'delivery-2',
-				shippingOrderAddress: { id: 'address-2', countryId: 'c2', firstName: 'C', lastName: 'D', street: 'S2', city: 'C2' },
+				shippingOrderAddress: { id: 'address-2', countryId: 'c2', countryStateId: null, salutationId: 'sal-2', firstName: 'C', lastName: 'D', zipcode: '20000', street: 'S2', city: 'C2' },
 				shippingMethodId: 'shipping-2',
 				stateId: 'state-2',
 				shippingDateEarliest: new Date('2026-03-21T10:00:00.000Z'),
@@ -178,6 +193,46 @@ describe('payload builder helpers', () => {
 				{ taxRate: 19, percentage: 14.29 },
 				{ taxRate: 20, percentage: 57.14 },
 			],
+		});
+	});
+
+	it('builds customer addresses with zipcode and country state', () => {
+		const result = buildCustomerAddresses(
+			[
+				{
+					country: 'country-1',
+					countryStateId: 'state-1',
+					firstName: 'Jane',
+					lastName: 'Doe',
+					zipcode: '10115',
+					city: 'Berlin',
+					street: 'Example Street 1',
+					defaultShippingAddress: true,
+					defaultBillingAddress: true,
+				},
+			],
+			'salutation-id',
+			() => 'address-id',
+			{} as never,
+			0,
+		);
+
+		expect(result).toEqual({
+			addresses: [
+				{
+					id: 'address-id',
+					countryId: 'country-1',
+					countryStateId: 'state-1',
+					firstName: 'Jane',
+					lastName: 'Doe',
+					zipcode: '10115',
+					city: 'Berlin',
+					street: 'Example Street 1',
+					salutationId: 'salutation-id',
+				},
+			],
+			defaultShippingAddressId: 'address-id',
+			defaultBillingAddressId: 'address-id',
 		});
 	});
 });

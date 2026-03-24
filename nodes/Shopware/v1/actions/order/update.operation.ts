@@ -20,6 +20,7 @@ import type {
 	Transaction,
 	OrderResponse,
 } from './types';
+import type { CountryStateResponse } from '../types';
 import { apiRequest } from '../../transport';
 import { orderFields } from './fields';
 import {
@@ -28,6 +29,7 @@ import {
 	getCustomerByNumber,
 	getPrePaymentOrderStates,
 	getLineItemDataBatch,
+	resolveCountryStateId,
 	getShippingMethodFullData,
 } from '../../helpers/utils';
 import { extractOrderUpdateParams } from '../../helpers/params';
@@ -103,6 +105,20 @@ const properties: INodeProperties[] = [
 								required: true,
 								default: '',
 								description: 'Customer last name',
+							},
+							{
+								displayName: 'Zip Code',
+								name: 'zipcode',
+								type: 'string',
+								default: '',
+								description: 'Billing address postal code',
+							},
+							{
+								displayName: 'State / Province',
+								name: 'state',
+								type: 'string',
+								default: '',
+								description: 'Optional state or province name/code for the billing address',
 							},
 							{
 								displayName: 'City',
@@ -216,6 +232,20 @@ const properties: INodeProperties[] = [
 												description: 'Customer last name',
 											},
 											{
+												displayName: 'Zip Code',
+												name: 'zipcode',
+												type: 'string',
+												default: '',
+												description: 'Shipping address postal code',
+											},
+											{
+												displayName: 'State / Province',
+												name: 'state',
+												type: 'string',
+												default: '',
+												description: 'Optional state or province name/code for the shipping address',
+											},
+											{
 												displayName: 'City',
 												name: 'city',
 												type: 'string',
@@ -321,6 +351,20 @@ const properties: INodeProperties[] = [
 								required: true,
 								default: '',
 								description: 'Customer last name',
+							},
+							{
+								displayName: 'Zip Code',
+								name: 'zipcode',
+								type: 'string',
+								default: '',
+								description: 'Shipping address postal code',
+							},
+							{
+								displayName: 'State / Province',
+								name: 'state',
+								type: 'string',
+								default: '',
+								description: 'Optional state or province name/code for the shipping address',
 							},
 							{
 								displayName: 'City',
@@ -432,6 +476,7 @@ export async function execute(
 	const returnData: INodeExecutionData[] = [];
 	let prePaymentOrderStatesPromise: Promise<Array<string>> | undefined;
 	const shippingMethodDataCache = new Map<string, Promise<Awaited<ReturnType<typeof getShippingMethodFullData>>>>();
+	const countryStateCache = new Map<string, Promise<CountryStateResponse[]>>();
 
 	for (let i = 0; i < items.length; i++) {
 		try {
@@ -465,8 +510,18 @@ export async function execute(
 					customerData.billingAddress = {
 						id: uuidv7(),
 						countryId: params.billingAddress.country,
+						countryStateId: await resolveCountryStateId.call(
+							this,
+							params.billingAddress.country,
+							params.billingAddress.state,
+							countryStateCache,
+							i,
+							'Billing state / province',
+						),
+						salutationId: prevOrderCustomer.salutationId,
 						firstName: params.billingAddress.firstName,
 						lastName: params.billingAddress.lastName,
+						zipcode: params.billingAddress.zipcode ?? '',
 						city: params.billingAddress.city,
 						street: params.billingAddress.street,
 					};
@@ -476,8 +531,18 @@ export async function execute(
 				customerData.shippingAddress = {
 					id: uuidv7(),
 					countryId: params.shippingAddress.country,
+					countryStateId: await resolveCountryStateId.call(
+						this,
+						params.shippingAddress.country,
+						params.shippingAddress.state,
+						countryStateCache,
+						i,
+						'Shipping state / province',
+					),
+					salutationId: prevOrderCustomer.salutationId,
 					firstName: params.shippingAddress.firstName,
 					lastName: params.shippingAddress.lastName,
+					zipcode: params.shippingAddress.zipcode ?? '',
 					city: params.shippingAddress.city,
 					street: params.shippingAddress.street,
 				};
@@ -542,8 +607,11 @@ export async function execute(
 				customerShippingAddress = buildOrderAddressPayload({
 					id: customerData.shippingAddress.id,
 					countryId: customerData.shippingAddress.countryId,
+					countryStateId: customerData.shippingAddress.countryStateId,
+					salutationId: customerData.shippingAddress.salutationId,
 					firstName: customerData.shippingAddress.firstName,
 					lastName: customerData.shippingAddress.lastName,
+					zipcode: customerData.shippingAddress.zipcode,
 					city: customerData.shippingAddress.city,
 					street: customerData.shippingAddress.street,
 				});
@@ -566,11 +634,14 @@ export async function execute(
 							} else {
 								shippingAddress = {
 									id: uuidv7(),
-									countryId: existingCustomer!.defaultShippingAddressId,
-									firstName: prevOrderCustomer.firstName,
-									lastName: prevOrderCustomer.lastName,
-									street: '',
-									city: '',
+									countryId: existingCustomer!.shippingAddress.countryId,
+									countryStateId: existingCustomer!.shippingAddress.countryStateId,
+									salutationId: existingCustomer!.shippingAddress.salutationId,
+									firstName: existingCustomer!.shippingAddress.firstName,
+									lastName: existingCustomer!.shippingAddress.lastName,
+									zipcode: existingCustomer!.shippingAddress.zipcode,
+									street: existingCustomer!.shippingAddress.street,
+									city: existingCustomer!.shippingAddress.city,
 								};
 							}
 						} else {
@@ -581,8 +652,8 @@ export async function execute(
 									itemIndex: i,
 								});
 							}
-							for (const key in address) {
-								if (address[key as keyof AddressValues] === '') {
+							for (const key of ['country', 'firstName', 'lastName', 'city', 'street'] as Array<keyof AddressValues>) {
+								if (address[key] === '') {
 									throw new NodeOperationError(this.getNode(), 'Missing required value for shipping address', {
 										description: `Shipping address ${key} must be a valid value.`,
 										itemIndex: i,
@@ -592,8 +663,18 @@ export async function execute(
 							shippingAddress = buildOrderAddressPayload({
 								id: uuidv7(),
 								countryId: address.country,
+								countryStateId: await resolveCountryStateId.call(
+									this,
+									address.country,
+									address.state,
+									countryStateCache,
+									i,
+									'Delivery state / province',
+								),
+								salutationId: prevOrderCustomer.salutationId,
 								firstName: address.firstName,
 								lastName: address.lastName,
+								zipcode: address.zipcode ?? '',
 								city: address.city,
 								street: address.street,
 							});

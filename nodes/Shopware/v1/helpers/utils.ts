@@ -16,6 +16,7 @@ import {
 } from '../actions/fields';
 import {
 	CustomerAddressResponse,
+	CountryStateResponse,
 	CustomerResponse,
 	DeliveryTimeResponse,
 	LineItemResponse,
@@ -516,6 +517,103 @@ export async function getLineItemData(
 		unitPrice: price.gross,
 		taxRate,
 	};
+}
+
+function normalizeCountryStateInput(value: string): string {
+	return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+async function getCountryStatesByCountryId(
+	this: IExecuteFunctions,
+	countryId: string,
+	cache: Map<string, Promise<CountryStateResponse[]>>,
+): Promise<CountryStateResponse[]> {
+	if (!cache.has(countryId)) {
+		cache.set(
+			countryId,
+			(async () => {
+				const body = {
+					limit: 500,
+					fields: ['id', 'name', 'shortCode'],
+					includes: {
+						'country-state': ['id', 'name', 'shortCode'],
+					},
+					filter: [
+						{
+							type: 'equals',
+							field: 'countryId',
+							value: countryId,
+						},
+					],
+				};
+
+				return ((await apiRequest.call(this, 'POST', `/search/country-state`, body)).data ?? []) as CountryStateResponse[];
+			})(),
+		);
+	}
+
+	return await cache.get(countryId)!;
+}
+
+export async function resolveCountryStateId(
+	this: IExecuteFunctions,
+	countryId: string,
+	stateInput: string | undefined,
+	cache: Map<string, Promise<CountryStateResponse[]>>,
+	itemIndex?: number,
+	fieldLabel: string = 'State / Province',
+): Promise<string | null> {
+	if (!stateInput || stateInput.trim() === '') {
+		return null;
+	}
+
+	const states = await getCountryStatesByCountryId.call(this, countryId, cache);
+	if (states.length === 0) {
+		throw new NodeOperationError(this.getNode(), 'State / province not available', {
+			description: `${fieldLabel} was provided, but the selected country does not define any states in Shopware.`,
+			itemIndex,
+		});
+	}
+
+	const trimmedInput = stateInput.trim();
+	const normalizedInput = normalizeCountryStateInput(trimmedInput);
+
+	const exactIdMatch = states.find((state) => state.id === trimmedInput);
+	if (exactIdMatch) {
+		return exactIdMatch.id;
+	}
+
+	const exactShortCodeMatch = states.find((state) => state.shortCode?.trim() === trimmedInput);
+	if (exactShortCodeMatch) {
+		return exactShortCodeMatch.id;
+	}
+
+	const exactNameMatch = states.find((state) => state.name.trim() === trimmedInput);
+	if (exactNameMatch) {
+		return exactNameMatch.id;
+	}
+
+	const normalizedMatches = states.filter(
+		(state) =>
+			normalizeCountryStateInput(state.name) === normalizedInput ||
+			normalizeCountryStateInput(state.shortCode ?? '') === normalizedInput,
+	);
+
+	if (normalizedMatches.length === 1) {
+		return normalizedMatches[0].id;
+	}
+
+	if (normalizedMatches.length > 1) {
+		throw new NodeOperationError(this.getNode(), 'State / province is ambiguous', {
+			description: `${fieldLabel} "${stateInput}" matches multiple states for the selected country: ${normalizedMatches.map((state) => state.name).join(', ')}.`,
+			itemIndex,
+		});
+	}
+
+	throw new NodeOperationError(this.getNode(), 'State / province not found', {
+		description: `${fieldLabel} "${stateInput}" does not match any state for the selected country.`,
+		itemIndex,
+	});
 }
 
 async function getTaxRatesByIds(

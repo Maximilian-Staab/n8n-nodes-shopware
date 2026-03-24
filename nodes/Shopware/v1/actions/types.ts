@@ -45,8 +45,11 @@ export interface CustomerResponse {
 export interface CustomerAddressResponse {
 	id: string;
 	countryId: string;
+	countryStateId: string | null;
+	salutationId: string;
 	firstName: string;
 	lastName: string;
+	zipcode: string;
 	street: string;
 	city: string;
 }
@@ -74,6 +77,12 @@ export type DeliveryTimeResponse = {
 	min: number;
 	max: number;
 	unit: 'hour' | 'day' | 'week';
+};
+
+export type CountryStateResponse = {
+	id: string;
+	name: string;
+	shortCode?: string | null;
 };
 
 export type SalutationOption = {

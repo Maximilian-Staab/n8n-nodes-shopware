@@ -13,7 +13,8 @@ import {
 } from 'n8n-workflow';
 import { apiRequest } from '../../transport';
 import { customerFields } from './fields';
-import { getDefaultSalutationId, uuidv7, wrapData } from '../../helpers/utils';
+import type { CountryStateResponse } from '../types';
+import { getDefaultSalutationId, resolveCountryStateId, uuidv7, wrapData } from '../../helpers/utils';
 import { extractCustomerCreateParams } from '../../helpers/params';
 import { buildCustomerAddresses, buildCustomerCreatePayload, cleanPayload } from '../../helpers/payloadBuilders';
 
@@ -149,6 +150,20 @@ const properties: INodeProperties[] = [
 						description: 'Customer last name',
 					},
 					{
+						displayName: 'Zip Code',
+						name: 'zipcode',
+						type: 'string',
+						default: '',
+						description: "Customer's postal code",
+					},
+					{
+						displayName: 'State / Province',
+						name: 'state',
+						type: 'string',
+						default: '',
+						description: 'Optional state or province name/code for the address',
+					},
+					{
 						displayName: 'City',
 						name: 'city',
 						type: 'string',
@@ -203,6 +218,7 @@ export async function execute(
 
 	for (let i = 0; i < items.length; i++) {
 		try {
+			const countryStateCache = new Map<string, Promise<CountryStateResponse[]>>();
 			const params = extractCustomerCreateParams.call(this, i);
 
 			if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(params.email)) {
@@ -224,8 +240,22 @@ export async function execute(
 				salutationId = await getDefaultSalutationId.call(this);
 			}
 
+			const resolvedAddresses = await Promise.all(
+				params.nodeAddresses.map(async (address) => ({
+					...address,
+					countryStateId: await resolveCountryStateId.call(
+						this,
+						address.country,
+						address.state,
+						countryStateCache,
+						i,
+						'State / Province',
+					),
+				})),
+			);
+
 			const addressResult = buildCustomerAddresses(
-				params.nodeAddresses,
+				resolvedAddresses,
 				salutationId,
 				uuidv7,
 				this.getNode(),

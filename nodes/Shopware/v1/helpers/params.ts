@@ -24,7 +24,7 @@ export interface OrderCreateParams {
 	nodeTransactions: NodeTransaction[] | null;
 	nodeDeliveries: NodeDelivery[] | null;
 	orderNumber: string;
-	dateAndTime: Date;
+	dateAndTime: string;
 	stateId: string;
 }
 
@@ -74,7 +74,7 @@ export function extractOrderCreateParams(
 	).delivery;
 
 	const orderNumber = this.getNodeParameter('orderNumber', i) as string;
-	const dateAndTime = this.getNodeParameter('dateAndTime', i) as Date;
+	const dateAndTime = this.getNodeParameter('dateAndTime', i) as string;
 	const stateId = this.getNodeParameter('state', i) as string;
 
 	return {

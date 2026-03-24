@@ -17,8 +17,10 @@ export interface CustomerCreatePayload {
 	addresses: Array<{
 		id: string;
 		countryId: string;
+		countryStateId?: string | null;
 		firstName: string;
 		lastName: string;
+		zipcode?: string;
 		city: string;
 		street: string;
 		salutationId: string;
@@ -36,8 +38,11 @@ export type CustomerUpdatePayload = Partial<CustomerCreatePayload>;
 
 export type NodeCustomerAddress = {
 	country: string;
+	state?: string;
+	countryStateId?: string | null;
 	firstName: string;
 	lastName: string;
+	zipcode?: string;
 	city: string;
 	street: string;
 	defaultShippingAddress: boolean;

@@ -15,8 +15,11 @@ export const orderCustomerFields = [
 export const orderAddressFields = [
 	'id',
 	'countryId',
+	'countryStateId',
+	'salutationId',
 	'firstName',
 	'lastName',
+	'zipcode',
 	'street',
 	'city',
 ];
