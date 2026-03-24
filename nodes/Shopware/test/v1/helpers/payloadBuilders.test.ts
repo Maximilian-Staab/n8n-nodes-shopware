@@ -34,8 +34,8 @@ describe('payload builder helpers', () => {
 				{ taxRate: 10, percentage: 33.33 },
 				{ taxRate: 20, percentage: 66.67 },
 			],
-			positionPrice: 30,
-			rawTotal: 30,
+			positionPrice: 35,
+			rawTotal: 35,
 			taxStatus: 'gross',
 		});
 	});

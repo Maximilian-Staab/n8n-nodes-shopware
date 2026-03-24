@@ -60,7 +60,7 @@ describe('utils helper error paths', () => {
 						productNumber: 'P-1',
 						name: 'Product 1',
 						states: ['state-1'],
-						price: [{ currencyId: 'currency-id', net: 10 }],
+						price: [{ currencyId: 'currency-id', gross: 10, net: 8.4 }],
 						taxId: 'tax-1',
 					},
 					{
@@ -68,7 +68,7 @@ describe('utils helper error paths', () => {
 						productNumber: 'P-2',
 						name: 'Product 2',
 						states: ['state-2'],
-						price: [{ currencyId: 'currency-id', net: 20 }],
+						price: [{ currencyId: 'currency-id', gross: 20, net: 16.81 }],
 						taxId: 'tax-2',
 					},
 				],
@@ -91,6 +91,7 @@ describe('utils helper error paths', () => {
 		expect(result.get('P-1')).toEqual({
 			identifier: 'product-1',
 			productId: 'product-1',
+			productNumber: 'P-1',
 			label: 'Product 1',
 			states: ['state-1'],
 			unitPrice: 10,
@@ -99,6 +100,7 @@ describe('utils helper error paths', () => {
 		expect(result.get('P-2')).toEqual({
 			identifier: 'product-2',
 			productId: 'product-2',
+			productNumber: 'P-2',
 			label: 'Product 2',
 			states: ['state-2'],
 			unitPrice: 20,

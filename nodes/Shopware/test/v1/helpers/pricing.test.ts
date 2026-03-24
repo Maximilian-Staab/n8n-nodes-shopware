@@ -16,8 +16,8 @@ describe('pricing helpers', () => {
 		expect(calculateLineItemPrice(19.99, 3, 19)).toEqual({
 			unitPrice: 19.99,
 			totalPrice: 59.97,
-			tax: 11.39,
-			taxPrice: 71.36,
+			tax: 9.58,
+			taxPrice: 59.97,
 		});
 	});
 
@@ -46,17 +46,17 @@ describe('pricing helpers', () => {
 		];
 
 		expect(calculateOrderTotals(lineItems)).toEqual({
-			netPrice: 30,
-			totalPrice: 35,
-			taxTotal: 5,
+			netPrice: 25.76,
+			totalPrice: 30,
+			taxTotal: 4.24,
 			quantity: 2,
 			calculatedTaxes: [
-				{ tax: 1, taxRate: 10, price: 11 },
-				{ tax: 4, taxRate: 20, price: 24 },
+				{ tax: 0.91, taxRate: 10, price: 10 },
+				{ tax: 3.33, taxRate: 20, price: 20 },
 			],
 			taxRules: [
-				{ taxRate: 10, percentage: 33.33 },
-				{ taxRate: 20, percentage: 66.67 },
+				{ taxRate: 10, percentage: 35.29 },
+				{ taxRate: 20, percentage: 64.71 },
 			],
 		});
 	});
