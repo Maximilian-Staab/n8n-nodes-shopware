@@ -79,10 +79,12 @@ const properties: INodeProperties[] = [
 			{
 				displayName: 'Manufacturer',
 				name: 'manufacturer',
-				type: 'string',
+				type: 'options',
+				typeOptions: {
+					loadOptionsMethod: 'getProductManufacturers',
+				},
 				default: '',
-				placeholder: 'e.g. Apple',
-				description: 'Name of the manufacturer of the product',
+				description: 'Select the manufacturer from the list',
 			},
 			{
 				displayName: 'Media',
