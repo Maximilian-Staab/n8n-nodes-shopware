@@ -5,6 +5,7 @@ import * as product from './product/Product.resource';
 import * as customer from './customer/Customer.resource';
 import * as order from './order/Order.resource';
 import * as category from './category/Category.resource';
+import * as manufacturer from './manufacturer/Manufacturer.resource';
 
 export const versionDescription: INodeTypeDescription = {
 	displayName: 'Shopware',
@@ -49,6 +50,10 @@ export const versionDescription: INodeTypeDescription = {
 					name: 'Category',
 					value: 'category',
 				},
+				{
+					name: 'Manufacturer',
+					value: 'manufacturer',
+				},
 			],
 			default: 'product',
 		},
@@ -56,5 +61,6 @@ export const versionDescription: INodeTypeDescription = {
 		...customer.description,
 		...order.description,
 		...category.description,
+		...manufacturer.description,
 	],
 };

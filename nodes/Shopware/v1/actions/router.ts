@@ -5,6 +5,7 @@ import * as product from './product/Product.resource';
 import * as customer from './customer/Customer.resource';
 import * as order from './order/Order.resource';
 import * as category from './category/Category.resource';
+import * as manufacturer from './manufacturer/Manufacturer.resource';
 
 /**
  * Routes the execution to the appropriate resource and operation handler.
@@ -42,6 +43,9 @@ export async function router(this: IExecuteFunctions): Promise<INodeExecutionDat
 				break;
 			case 'category':
 				returnData = await category[shopwareNodeData.operation].execute.call(this, items);
+				break;
+			case 'manufacturer':
+				returnData = await manufacturer[shopwareNodeData.operation].execute.call(this, items);
 				break;
 			default:
 				throw new NodeOperationError(

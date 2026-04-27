@@ -5,6 +5,7 @@ type NodeMap = {
 	customer: 'create' | 'deleteCustomer' | 'get' | 'getMany' | 'update';
 	order: 'create' | 'deleteOrder' | 'get' | 'getMany' | 'update';
 	category: 'create' | 'deleteCategory' | 'get' | 'getMany' | 'update';
+	manufacturer: 'create' | 'deleteManufacturer' | 'get' | 'getMany' | 'update';
 };
 
 export type ShopwareType = AllEntities<NodeMap>;
