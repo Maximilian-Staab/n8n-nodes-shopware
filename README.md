@@ -22,11 +22,13 @@ Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes
 
 This node currently supports the following resources and operations:
 
-| Resource | Get | Get Many | Create | Update | Delete |
-|----------|-----|----------|--------|--------|--------|
-| Product  |  ✓  |     ✓    |    ✓   |    ✓   |    ✓   |
-| Customer |  ✓  |     ✓    |    ✓   |    ✓   |    ✓   |
-| Order    |  ✓  |     ✓    |    ✓   |    ✓   |    ✓   |
+| Resource      | Get | Get Many | Create | Update | Delete |
+|---------------|-----|----------|--------|--------|--------|
+| Product       |  ✓  |     ✓    |    ✓   |    ✓   |    ✓   |
+| Customer      |  ✓  |     ✓    |    ✓   |    ✓   |    ✓   |
+| Order         |  ✓  |     ✓    |    ✓   |    ✓   |    ✓   |
+| Category      |  ✓  |     ✓    |    ✓   |    ✓   |    ✓   |
+| Manufacturer  |  ✓  |     ✓    |    ✓   |    ✓   |    ✓   |
 
 ## Credentials
 
