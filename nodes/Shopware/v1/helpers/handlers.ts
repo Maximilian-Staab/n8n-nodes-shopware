@@ -261,3 +261,12 @@ export const categoryFilterHandlers: { [key: string]: (value: GenericValue | Pri
 	name: (value) => ({ type: 'equals', field: 'name', value }),
 	parentId: (value) => ({ type: 'equals', field: 'parentId', value }),
 };
+
+export const manufacturerFilterHandlers: { [key: string]: (value: GenericValue) => SearchFilter } = {
+	ids: (value) => ({
+		type: 'equalsAny',
+		field: 'id',
+		value: (value as string).split(',').map((id) => id.trim()),
+	}),
+	name: (value) => ({ type: 'equals', field: 'name', value }),
+};

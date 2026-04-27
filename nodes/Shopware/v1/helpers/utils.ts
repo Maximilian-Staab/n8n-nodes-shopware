@@ -33,6 +33,7 @@ import {
 	customerFilterHandlers,
 	orderFilterHandlers,
 	productFilterHandlers,
+	manufacturerFilterHandlers,
 } from './handlers';
 
 function getFirstDataEntry<T>(
@@ -809,7 +810,7 @@ export function constructSearchBody(
 	this: IExecuteFunctions,
 	paginationData: PaginationData,
 	baseFields: string[],
-	entity: 'order' | 'product' | 'customer' | 'category',
+	entity: 'order' | 'product' | 'customer' | 'category' | 'product-manufacturer',
 	filters?: IDataObject,
 	...associations: string[]
 ): SearchBodyConstruct {
@@ -854,6 +855,14 @@ export function constructSearchBody(
 						searchBody.filter!.push(categoryFilterHandlers[key](value));
 					}
 				});
+				break;
+			case 'product-manufacturer':
+				Object.entries(filters).forEach(([key, value]) => {
+					if (manufacturerFilterHandlers[key]) {
+						searchBody.filter!.push(manufacturerFilterHandlers[key](value));
+					}
+				});
+				break;
 		}
 	}
 

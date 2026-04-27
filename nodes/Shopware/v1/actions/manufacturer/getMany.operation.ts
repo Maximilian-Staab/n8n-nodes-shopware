@@ -42,6 +42,13 @@ const properties: INodeProperties[] = [
 		default: {},
 		options: [
 			{
+				displayName: 'IDs',
+				name: 'ids',
+				type: 'string',
+				default: '',
+				description: 'Retrieve only manufacturers specified by a comma-separated list of IDs',
+			},
+			{
 				displayName: 'Name',
 				name: 'name',
 				type: 'string',
