@@ -429,9 +429,7 @@ export function buildProductCreatePayload(input: ProductCreatePayloadInput): Pro
 		description: input.description,
 		price,
 		taxId,
-		manufacturer: input.manufacturer
-			? { name: input.manufacturer }
-			: undefined,
+		manufacturerId: input.manufacturer || undefined,
 		stock: input.stock,
 		categories: input.categories.map((category) => {
 			const categoryData = JSON.parse(category) as string[];
@@ -482,11 +480,7 @@ export function buildProductUpdatePayload(
 				: []),
 		],
 		taxId: updateFields.taxRate ? (JSON.parse(updateFields.taxRate as string) as string[])[0] : undefined,
-		manufacturer: (updateFields.manufacturer as string)
-			? {
-					name: updateFields.manufacturer as string,
-				}
-			: undefined,
+		manufacturerId: updateFields.manufacturer as string || undefined,
 		stock: updateFields.stock as number,
 		categories: (updateFields.categories as string[])?.map((category) => {
 			const categoryData = JSON.parse(category) as string[];

@@ -7,7 +7,7 @@ export interface NodeProductMedia {
 export interface ProductCreatePayload {
 	id?: string;
 	parentId?: string;
-	manufacturer?: { name: string };
+	manufacturerId?: string;
 	active?: boolean;
 	displayGroup?: string;
 	ratingAverage?: number;
